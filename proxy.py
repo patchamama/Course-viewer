@@ -391,7 +391,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     cfg = json.load(f)
-                cfg['_dirId'] = hashlib.md5(STATIC_DIR.encode()).hexdigest()[:8]
+                cfg['_dirId']   = hashlib.md5(STATIC_DIR.encode()).hexdigest()[:8]
+                cfg['_dirName'] = os.path.basename(STATIC_DIR)
                 data = json.dumps(cfg, ensure_ascii=False, indent=2).encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')

@@ -3,6 +3,10 @@
 [![Version](https://img.shields.io/badge/version-1.0.0-7c8cf8?style=flat-square)](https://github.com/patchamama/Course-viewer/releases)
 [![Live](https://img.shields.io/badge/demo-GitHub%20Pages-3b4fd8?style=flat-square)](https://patchamama.github.io/Course-viewer/course-viewer.html)
 [![License](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.8+-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![JavaScript](https://img.shields.io/badge/Vanilla%20JS-ES2022-f7df1e?style=flat-square&logo=javascript&logoColor=black)](course-viewer.html)
+[![HTML5](https://img.shields.io/badge/HTML5-single%20file-e34f26?style=flat-square&logo=html5&logoColor=white)](course-viewer.html)
+[![No dependencies](https://img.shields.io/badge/dependencies-zero-22c55e?style=flat-square)](course-viewer.html)
 
 **Live demo:** https://patchamama.github.io/Course-viewer/course-viewer.html
 

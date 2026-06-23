@@ -739,7 +739,7 @@
     <div class="panel-body" id="panel-b-body" style="padding:0">
       <div id="pw-bar">
         <i data-lucide="key" size="13"></i>
-        Password: <code id="pw-display">Handout4ETB</code>
+        Password: <code id="pw-display"></code>
         <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="copyPw()">
           <i data-lucide="copy" size="11"></i> Copy
         </button>
@@ -1448,7 +1448,7 @@ const PanelB = {
       if (iconEl) iconEl.setAttribute('data-lucide', 'notebook-pen');
       PanelBNotes.pullFromMain();
     } else {
-      if (pwBar) pwBar.style.display = '';
+      if (pwBar) pwBar.style.display = appConfig?.coursePassword ? '' : 'none';
       if (tabBar) tabBar.style.display = '';
       if (framesContainer) framesContainer.style.display = '';
       if (notesWrap) notesWrap.style.display = 'none';
@@ -1518,7 +1518,7 @@ const PanelBNotes = {
     const ed = document.getElementById('panelb-notes-editor');
     const pv = document.getElementById('panelb-notes-preview');
     if (ed) ed.style.display = tab === 'edit' ? '' : 'none';
-    if (pv) pv.style.display = tab === 'preview' ? '' : 'none';
+    if (pv) pv.style.display = tab === 'preview' ? 'block' : 'none';
     if (tab === 'preview') this._renderPreview();
   },
 
@@ -2309,7 +2309,7 @@ const Notes = {
     const editor = document.getElementById('notes-editor');
     const preview = document.getElementById('notes-preview');
     editor.style.display = tab === 'edit' ? '' : 'none';
-    preview.style.display = tab === 'preview' ? '' : 'none';
+    preview.style.display = tab === 'preview' ? 'block' : 'none';
     if (tab === 'preview') this._renderPreview();
   },
 
@@ -2455,10 +2455,12 @@ function initSection(id, defaultOpen = false) {
 async function loadCourseFrame(frame) {
   if (!appConfig) return;
   const raw = appConfig.courseUrl;
-  const pw  = appConfig.coursePassword || 'Handout4EFB';
+  const pw  = appConfig.coursePassword || '';
 
   const pwEl = document.getElementById('pw-display');
   if (pwEl) pwEl.textContent = pw;
+  const pwBar = document.getElementById('pw-bar');
+  if (pwBar) pwBar.style.display = pw ? '' : 'none';
 
   const onLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
   if (onLocalhost) {
@@ -2498,17 +2500,18 @@ function _showProxyError(frame, pw, url) {
     <div>
       <div style="font-weight:700;color:#f87171;font-size:14px;margin-bottom:8px">Proxy server not running</div>
       <div style="font-size:12px;margin-bottom:10px">Run the launcher to enable the in-app course view:</div>
-      <code style="display:block;background:#0f1117;padding:8px 14px;border-radius:7px;font-size:12px;border:1px solid #2d3154;margin-bottom:12px">
-        Windows: <b>start.bat</b><br>
-        Mac/Linux: <b>bash start.sh</b>
-      </code>
-      <div style="font-size:11px;color:#64748b;margin-bottom:10px">Or open the course in a new browser tab:</div>
+      <pre style="background:#0f1117;padding:8px 14px;border-radius:7px;font-size:11px;border:1px solid #2d3154;margin-bottom:12px;text-align:left;white-space:pre-wrap;word-break:break-all"><b># Windows</b>
+powershell -c "iwr https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.bat -OutFile start.bat"; .\start.bat
+
+<b># macOS / Linux</b>
+curl -fsSL https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.sh -o start.sh &amp;&amp; bash start.sh</pre>
+      <div style="font-size:11px;color:#64748b;margin-bottom:10px">Or open the course directly in a new tab:</div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-ghost" onclick="copyPw()" style="font-size:12px">
-          <i data-lucide="copy" size="12"></i> Copy Password (${pw})
-        </button>
+        ${pw ? `<button class="btn btn-ghost" onclick="copyPw()" style="font-size:12px">
+          <i data-lucide="copy" size="12"></i> Copy Password
+        </button>` : ''}
         <a href="${url}" target="_blank" rel="noopener" class="btn btn-primary" style="font-size:12px;text-decoration:none">
-          <i data-lucide="external-link" size="12"></i> Open Course Viewer
+          <i data-lucide="external-link" size="12"></i> Open Course
         </a>
       </div>
     </div>`;
@@ -2569,7 +2572,9 @@ function copyPw() {
 // EXTERNAL VIDEOS (persistent user-added videos)
 // ────────────────────────────────────────────────────────────
 const ExternalVideos = {
-  _key: 'oc_external_videos',
+  _key: 'oc_external_videos_default',
+
+  init(dirId) { this._key = `oc_external_videos_${dirId || 'default'}`; },
 
   load() {
     try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch { return []; }
@@ -2668,9 +2673,17 @@ const Sessions = {
     const sel = document.getElementById('sessions-list');
     if (!sel) return;
     const list = this._all();
-    sel.innerHTML = list.length
-      ? list.map(s => `<option value="${s.id}">${s.name}</option>`).join('')
-      : '<option disabled>No sessions saved</option>';
+    if (!list.length) { sel.innerHTML = '<option disabled>No sessions saved</option>'; return; }
+    const auto = list.filter(s => s.auto);
+    const manual = list.filter(s => !s.auto);
+    let html = '';
+    if (auto.length) {
+      html += `<optgroup label="Directories">${auto.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</optgroup>`;
+    }
+    if (manual.length) {
+      html += `<optgroup label="Saved sessions">${manual.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</optgroup>`;
+    }
+    sel.innerHTML = html;
   },
 
   openSave() {
@@ -2734,6 +2747,26 @@ const Sessions = {
       } else { urlLink.style.display = 'none'; }
     }
     toast(`Session "${session.name}" loaded`);
+  },
+
+  autoSave(dirId, dirName) {
+    const id = `auto_${dirId}`;
+    const list = this._all();
+    const existing = list.findIndex(s => s.id === id);
+    const extVids = ExternalVideos.load().map(v => { const c = {...v}; delete c._external; return c; });
+    const session = {
+      id,
+      name: `📁 ${dirName}`,
+      auto: true,
+      savedAt: new Date().toISOString(),
+      courseUrl: appConfig?.courseUrl || '',
+      coursePassword: appConfig?.coursePassword || '',
+      videos: [...(appConfig?.videos || []), ...extVids],
+      tabs: []
+    };
+    if (existing >= 0) list[existing] = session;
+    else list.unshift(session);
+    this._save(list);
   },
 
   deleteSelected() {
@@ -3089,6 +3122,18 @@ async function init() {
 
   if (!appConfig) appConfig = { courseUrl: '', coursePassword: '', videos: [] };
 
+  // Namespace ExternalVideos by directory so different directories don't bleed into each other
+  ExternalVideos.init(appConfig._dirId);
+
+  // Show/hide password bar (never show if no password in config)
+  {
+    const pwBar = document.getElementById('pw-bar');
+    const pwEl  = document.getElementById('pw-display');
+    const hasPw = !!appConfig.coursePassword;
+    if (pwBar) pwBar.style.display = hasPw ? '' : 'none';
+    if (pwEl)  pwEl.textContent    = appConfig.coursePassword || '';
+  }
+
   // Show/hide backend-dependent UI
   document.getElementById('btn-open-dir')?.style.setProperty('display',
     (!_hasBackend && window.showDirectoryPicker) ? '' : 'none');
@@ -3130,6 +3175,10 @@ async function init() {
   ReaderZoom.init();
   NotesZoom.init();
   TabManager.init();
+  // Auto-save directory session so it appears in the listbox alongside manual sessions
+  if (_hasBackend && appConfig._dirId) {
+    Sessions.autoSave(appConfig._dirId, appConfig._dirName || appConfig._dirId);
+  }
   Sessions.render();
   initSection('sessions', false);
 
