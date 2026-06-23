@@ -519,6 +519,14 @@
     <i data-lucide="upload" size="16"></i>
   </button>
 
+  <button class="hdr-btn" id="btn-open-dir" title="Open local course directory" onclick="DirectoryPicker.open()" style="display:none">
+    <i data-lucide="folder-open" size="16"></i>
+  </button>
+
+  <button class="hdr-btn" title="Share course link" onclick="Share.open()">
+    <i data-lucide="share-2" size="16"></i>
+  </button>
+
   <div style="flex:1"></div>
 
   <!-- Fullscreen -->
@@ -629,6 +637,27 @@
         </div>
         <div id="files-body" style="padding:8px;display:none;flex-direction:column;gap:4px">
           <div id="file-list" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+      </div>
+
+      <!-- Course Sessions -->
+      <div class="card" style="padding:0">
+        <div class="section-header" onclick="toggleSection('sessions')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
+          <i data-lucide="bookmark" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+          <span class="section-label" style="margin:0;flex:1">Sessions</span>
+          <button class="btn btn-ghost" style="padding:2px 6px" onclick="event.stopPropagation();Sessions.openSave()" title="Save current session">
+            <i data-lucide="plus" size="12"></i>
+          </button>
+          <i data-lucide="chevron-right" id="sessions-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
+        </div>
+        <div id="sessions-body" style="padding:8px;display:none;flex-direction:column;gap:6px">
+          <select id="sessions-list" multiple style="width:100%;font-size:11px;background:#1e2947;border:1px solid #2d3154;color:#e2e8f0;border-radius:4px;padding:4px;min-height:80px"></select>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-primary" style="flex:1;font-size:11px;padding:3px 8px" onclick="Sessions.loadSelected()">Load</button>
+            <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="Sessions.deleteSelected()" title="Delete selected">
+              <i data-lucide="trash-2" size="11"></i>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -765,7 +794,10 @@
     <i data-lucide="notebook-pen" size="14" style="color:#7c8cf8;flex-shrink:0"></i>
     <span id="notes-title">Notes</span>
     <div style="flex:1"></div>
-    <div style="display:flex;gap:4px" onclick="event.stopPropagation()">
+    <div style="display:flex;gap:4px;align-items:center" onclick="event.stopPropagation()">
+      <button class="btn btn-ghost" style="padding:1px 6px;font-size:15px;line-height:1" onclick="NotesZoom.change(-0.1)" title="Smaller text">−</button>
+      <span id="notes-zoom-level" style="font-size:10px;min-width:28px;text-align:center;color:#94a3b8">100%</span>
+      <button class="btn btn-ghost" style="padding:1px 6px;font-size:15px;line-height:1" onclick="NotesZoom.change(0.1)" title="Larger text">+</button>
       <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Notes.exportMd()">
         <i data-lucide="download" size="11"></i> Export
       </button>
@@ -876,6 +908,42 @@
     <div style="display:flex;gap:6px;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="closeExtVideoModal()">Cancel</button>
       <button class="btn btn-primary" onclick="ExternalVideos.confirmAdd()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share modal -->
+<div id="share-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
+  <div class="card" style="width:500px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <i data-lucide="share-2" size="14" style="color:#7c8cf8"></i>
+      <span style="font-weight:700;color:#7c8cf8">Share Course</span>
+      <div style="flex:1"></div>
+      <button class="hdr-btn" onclick="Share.close()"><i data-lucide="x" size="14"></i></button>
+    </div>
+    <p style="font-size:11px;color:#94a3b8;margin:0">Encodes current course config into a URL. Recipients open it in Course Viewer — no server needed.</p>
+    <textarea id="share-url-output" readonly style="font-size:10px;resize:none;height:72px;font-family:monospace;background:#0f1117;color:#7c8cf8;border:1px solid #2d3154;border-radius:4px;padding:6px;word-break:break-all" onclick="this.select()"></textarea>
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="Share.close()">Close</button>
+      <button class="btn btn-primary" onclick="Share.copy()">
+        <i data-lucide="copy" size="12"></i> Copy URL
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Session save modal -->
+<div id="session-save-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
+  <div class="card" style="width:340px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-weight:700;color:#7c8cf8">Save Session</span>
+      <div style="flex:1"></div>
+      <button class="hdr-btn" onclick="Sessions.closeSave()"><i data-lucide="x" size="14"></i></button>
+    </div>
+    <input type="text" id="session-name-input" placeholder="Session name…" style="font-size:12px" onkeydown="if(event.key==='Enter')Sessions.confirmSave()">
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="Sessions.closeSave()">Cancel</button>
+      <button class="btn btn-primary" onclick="Sessions.confirmSave()">Save</button>
     </div>
   </div>
 </div>
@@ -2544,6 +2612,227 @@ function closeExtVideoModal() {
 }
 
 // ────────────────────────────────────────────────────────────
+// NOTES ZOOM
+// ────────────────────────────────────────────────────────────
+const NotesZoom = {
+  level: 1.0,
+  init() {
+    this.level = parseFloat(localStorage.getItem('oc_notes_zoom') || '1.0');
+    this._apply();
+  },
+  change(delta) {
+    this.level = Math.round(Math.max(0.5, Math.min(2.5, this.level + delta)) * 10) / 10;
+    localStorage.setItem('oc_notes_zoom', String(this.level));
+    this._apply();
+  },
+  _apply() {
+    const fs = this.level === 1.0 ? '' : (this.level * 14) + 'px';
+    const ids = ['notes-editor','notes-preview','panelb-notes-area','panelb-notes-preview'];
+    for (const id of ids) { const e = document.getElementById(id); if (e) e.style.fontSize = fs; }
+    const lvl = document.getElementById('notes-zoom-level');
+    if (lvl) lvl.textContent = Math.round(this.level * 100) + '%';
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// SESSIONS
+// ────────────────────────────────────────────────────────────
+const Sessions = {
+  _key: 'oc_sessions',
+
+  _all() {
+    try { return JSON.parse(localStorage.getItem(this._key)) || []; } catch { return []; }
+  },
+  _save(list) { localStorage.setItem(this._key, JSON.stringify(list)); },
+
+  render() {
+    const sel = document.getElementById('sessions-list');
+    if (!sel) return;
+    const list = this._all();
+    sel.innerHTML = list.length
+      ? list.map(s => `<option value="${s.id}">${s.name}</option>`).join('')
+      : '<option disabled>No sessions saved</option>';
+  },
+
+  openSave() {
+    document.getElementById('session-save-modal').style.display = 'flex';
+    const el = document.getElementById('session-name-input');
+    if (el) { el.value = ''; setTimeout(() => el.focus(), 50); }
+  },
+  closeSave() { document.getElementById('session-save-modal').style.display = 'none'; },
+
+  confirmSave() {
+    const name = document.getElementById('session-name-input')?.value?.trim();
+    if (!name) { toast('Enter a session name'); return; }
+    const extVids = ExternalVideos.load().map(v => { const c = {...v}; delete c._external; return c; });
+    const session = {
+      id: 'sess_' + Date.now(),
+      name,
+      savedAt: new Date().toISOString(),
+      courseUrl: appConfig?.courseUrl || '',
+      coursePassword: appConfig?.coursePassword || '',
+      videos: [...(appConfig?.videos || []), ...extVids],
+      tabs: (TabManager.tabs || [])
+        .filter(t => t.type !== 'image-viewer' && !t.url?.startsWith('blob:'))
+        .map(t => ({ id: t.id, title: t.title, type: t.type, url: t.url || '', scrollY: t.scrollY || 0 }))
+    };
+    const list = this._all();
+    list.push(session);
+    this._save(list);
+    this.render();
+    this.closeSave();
+    toast(`Session "${name}" saved`);
+  },
+
+  loadSelected() {
+    const sel = document.getElementById('sessions-list');
+    const id = sel?.value;
+    if (!id) { toast('Select a session first'); return; }
+    const session = this._all().find(s => s.id === id);
+    if (!session) return;
+    appConfig = { courseUrl: session.courseUrl, coursePassword: session.coursePassword, videos: session.videos || [] };
+    ExternalVideos.save([]);
+    renderFileList();
+    const allVids = appConfig.videos;
+    if (allVids.length > 0) Video.load(allVids[0]);
+    Sub.loadAll();
+    if (session.tabs?.length) {
+      TabManager.tabs = session.tabs;
+      TabManager._createAllFrames();
+      if (session.tabs[0]) TabManager.activeId = session.tabs[0].id;
+      TabManager._renderTabBar();
+      TabManager._applyActiveTab();
+    }
+    const pwEl = document.getElementById('pw-display');
+    if (pwEl) pwEl.textContent = session.coursePassword || '';
+    const urlLink = document.getElementById('course-url-link');
+    const urlText = document.getElementById('course-url-text');
+    if (urlLink && urlText) {
+      if (session.courseUrl) {
+        urlLink.href = session.courseUrl;
+        try { urlText.textContent = new URL(session.courseUrl).hostname; } catch { urlText.textContent = ''; }
+        urlLink.style.display = 'flex';
+      } else { urlLink.style.display = 'none'; }
+    }
+    toast(`Session "${session.name}" loaded`);
+  },
+
+  deleteSelected() {
+    const sel = document.getElementById('sessions-list');
+    const id = sel?.value;
+    if (!id) { toast('Select a session first'); return; }
+    const list = this._all().filter(s => s.id !== id);
+    this._save(list);
+    this.render();
+    toast('Session deleted');
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// SHARE
+// ────────────────────────────────────────────────────────────
+const Share = {
+  open() {
+    const extVids = ExternalVideos.load().map(v => { const c = {...v}; delete c._external; return c; });
+    const cfg = {
+      courseUrl: appConfig?.courseUrl || '',
+      coursePassword: appConfig?.coursePassword || '',
+      videos: [...(appConfig?.videos || []), ...extVids]
+    };
+    const encoded = btoa(encodeURIComponent(JSON.stringify(cfg)));
+    const base = 'https://patchamama.github.io/Course-viewer/course-viewer.html';
+    const url = `${base}?c=${encoded}`;
+    const out = document.getElementById('share-url-output');
+    if (out) out.value = url;
+    document.getElementById('share-modal').style.display = 'flex';
+  },
+  close() { document.getElementById('share-modal').style.display = 'none'; },
+  async copy() {
+    const url = document.getElementById('share-url-output')?.value;
+    if (!url) return;
+    try { await navigator.clipboard.writeText(url); toast('URL copied!'); }
+    catch { document.getElementById('share-url-output')?.select(); toast('Select and copy manually'); }
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// DIRECTORY PICKER
+// ────────────────────────────────────────────────────────────
+const DirectoryPicker = {
+  async open() {
+    if (!window.showDirectoryPicker) {
+      toast('Directory picker needs Chrome or Edge');
+      return;
+    }
+    let dirHandle;
+    try { dirHandle = await window.showDirectoryPicker({ mode: 'read' }); }
+    catch { return; }
+
+    const VIDEO_EXTS = new Set(['mp4','m4v','mov','mkv','avi','webm','ogg','ogv']);
+    const DOC_EXTS   = new Set(['pdf','md','html','htm','epub','txt']);
+    const IMG_EXTS   = new Set(['jpg','jpeg','png','gif','webp','svg']);
+    const SUB_EXTS   = new Set(['srt','vtt']);
+    const EXCLUDE    = new Set(['course-viewer.html','course-viewer.config.json','index.html','course.readme.txt']);
+
+    const videos = [], docs = [], images = [], subs = [];
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (handle.kind !== 'file' || EXCLUDE.has(name.toLowerCase())) continue;
+      const ext = name.split('.').pop().toLowerCase();
+      if (VIDEO_EXTS.has(ext)) videos.push({ name, handle });
+      else if (DOC_EXTS.has(ext)) docs.push({ name, handle });
+      else if (IMG_EXTS.has(ext)) images.push({ name, handle });
+      else if (SUB_EXTS.has(ext)) subs.push({ name, handle });
+    }
+
+    toast(`Scanning ${dirHandle.name}…`);
+
+    const videoEntries = [];
+    for (const { name, handle } of videos) {
+      const file = await handle.getFile();
+      const blobUrl = URL.createObjectURL(file);
+      const dotIdx = name.lastIndexOf('.');
+      const base = dotIdx > 0 ? name.slice(0, dotIdx) : name;
+      const m = base.match(/[\[(]([A-Za-z0-9_-]{11})[\])]/);
+      const youtubeId = m ? m[1] : '';
+      const vid_id = youtubeId ? 'yt_' + youtubeId : 'dir_' + encodeURIComponent(name);
+      const subEntry = subs.find(s => s.name.startsWith(base));
+      if (subEntry) {
+        const subFile = await subEntry.handle.getFile();
+        const subBlobUrl = URL.createObjectURL(subFile);
+        fetch(subBlobUrl).then(r => r.text()).then(text => {
+          if (!allSubtitleCues[vid_id]) allSubtitleCues[vid_id] = {};
+          allSubtitleCues[vid_id]['auto'] = Sub.parseSRT(text);
+        }).catch(() => {});
+      }
+      videoEntries.push({ id: vid_id, title: base, youtubeId, externalUrl: blobUrl, localFile: name, subtitleFile: '' });
+    }
+
+    appConfig = { courseUrl: '', coursePassword: '', videos: videoEntries };
+    ExternalVideos.save([]);
+    renderFileList();
+    if (videoEntries.length > 0) Video.load(videoEntries[0]);
+
+    TabManager.tabs = TabManager.tabs.filter(t => t.type === 'course');
+    for (const { name, handle } of docs) {
+      const file = await handle.getFile();
+      const blobUrl = URL.createObjectURL(file);
+      const title = name.length > 22 ? name.substring(0, 20) + '…' : name;
+      TabManager.openTab(blobUrl, title, 'custom');
+    }
+    if (images.length > 0) {
+      const imgUrls = [];
+      for (const { name, handle } of images) {
+        const file = await handle.getFile();
+        imgUrls.push(URL.createObjectURL(file));
+      }
+      TabManager.openImageViewer(imgUrls);
+    }
+
+    toast(`Opened: ${videoEntries.length} videos, ${docs.length} docs, ${images.length} images`);
+  }
+};
+
+// ────────────────────────────────────────────────────────────
 // IMAGE VIEWER
 // ────────────────────────────────────────────────────────────
 const ImageViewer = {
@@ -2621,18 +2910,31 @@ async function init() {
   Notes.init();
   initVideoResize();
 
-  // Load config
+  // Detect backend + load config
+  let _hasBackend = false;
   try {
     const r = await fetch('course-viewer.config.json');
-    appConfig = await r.json();
-  } catch {
-    // Fallback: inline defaults (so app works without HTTP server for basic UI)
-    appConfig = {
-      courseUrl: 'https://share.articulate.com/Mxh2Afx4Mh-Kh6xYmwuyv#/lessons/xCVlouFik9XCSuKDTsQ6Jk7jxW1h-N5c',
-      coursePassword: 'Handout4EFB',
-      videos: []
-    };
-  }
+    if (r.ok) {
+      appConfig = await r.json();
+      _hasBackend = !!appConfig._dirId; // proxy injects _dirId
+    }
+  } catch { /* no backend */ }
+
+  // Check URL params for shared config (?c=BASE64)
+  try {
+    const sharedParam = new URLSearchParams(window.location.search).get('c');
+    if (sharedParam) {
+      const shared = JSON.parse(decodeURIComponent(atob(sharedParam)));
+      appConfig = Object.assign({ courseUrl:'', coursePassword:'', videos:[] }, shared);
+    }
+  } catch { /* ignore invalid param */ }
+
+  if (!appConfig) appConfig = { courseUrl: '', coursePassword: '', videos: [] };
+
+  // Show/hide backend-dependent UI
+  document.getElementById('btn-open-dir')?.style.setProperty('display',
+    (!_hasBackend && window.showDirectoryPicker) ? '' : 'none');
+  window._hasBackend = _hasBackend;
 
   // Render file list
   renderFileList();
@@ -2665,7 +2967,10 @@ async function init() {
   PanelA.init();
   PanelB.init();
   ReaderZoom.init();
+  NotesZoom.init();
   TabManager.init();
+  Sessions.render();
+  initSection('sessions', false);
 
   // Auto-open local files when no course URL (and no saved custom tabs from localStorage)
   if (!appConfig.courseUrl) {
@@ -2697,6 +3002,8 @@ document.addEventListener('keydown', e => {
     closeLocalVideoModal();
     closeExtVideoModal();
     ImageViewer.close();
+    Share.close();
+    Sessions.closeSave();
   }
 });
 
@@ -2718,6 +3025,12 @@ document.getElementById('ext-video-modal').addEventListener('click', e => {
 });
 document.getElementById('image-viewer-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('image-viewer-modal')) ImageViewer.close();
+});
+document.getElementById('share-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('share-modal')) Share.close();
+});
+document.getElementById('session-save-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('session-save-modal')) Sessions.closeSave();
 });
 
 window.addEventListener('DOMContentLoaded', init);
