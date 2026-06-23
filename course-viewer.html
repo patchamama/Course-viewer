@@ -56,6 +56,14 @@
 
   .hdr-sep { width: 1px; height: 24px; background: #2d3154; margin: 0 4px; flex-shrink: 0; }
 
+  #dir-selector {
+    background: #1a1d2e; color: #a5b4fc; border: 1px solid #2d3154;
+    border-radius: 6px; padding: 2px 6px; font-size: 11px; max-width: 180px;
+    cursor: pointer; outline: none; height: 26px; flex-shrink: 0;
+  }
+  #dir-selector:hover { border-color: #3b4fd8; }
+  html.light #dir-selector { background: #1e293b; color: #818cf8; border-color: #334155; }
+
   #app-title {
     font-weight: 700; font-size: 15px; color: #7c8cf8; letter-spacing: -.3px;
     margin-right: 6px; white-space: nowrap;
@@ -486,6 +494,8 @@
 <header id="app-header">
   <span id="app-title">▶ Course Viewer</span><a id="app-version" href="https://github.com/patchamama/Course-viewer/releases" target="_blank" rel="noopener" style="font-size:9px;color:#3b4fd8;margin-left:5px;align-self:center;text-decoration:none;letter-spacing:.3px;flex-shrink:0" title="View releases">v1.0.0</a>
   <div class="hdr-sep"></div>
+  <select id="dir-selector" style="display:none" title="Switch directory" onchange="Sessions.switchDir(this.value)"></select>
+  <div class="hdr-sep" id="dir-selector-sep" style="display:none"></div>
 
   <!-- Layout: horizontal / vertical -->
   <button class="hdr-btn active" id="btn-layout-h" title="Horizontal layout" onclick="Layout.setMode('horizontal')">
@@ -1592,7 +1602,7 @@ const Video = {
 
   load(videoEntry) {
     currentVideo = videoEntry;
-    localStorage.setItem('oc_last_video_id', videoEntry.id);
+    localStorage.setItem(`oc_last_video_id_${appConfig?._dirId || 'default'}`, videoEntry.id);
     this.currentYtId = videoEntry.youtubeId || null;
     this.currentLocalUrl = null;
     const wrapper = document.getElementById('video-wrapper');
@@ -2705,19 +2715,42 @@ const Sessions = {
 
   render() {
     const sel = document.getElementById('sessions-list');
-    if (!sel) return;
-    const list = this._all();
-    if (!list.length) { sel.innerHTML = '<option disabled>No sessions saved</option>'; return; }
-    const auto = list.filter(s => s.auto);
-    const manual = list.filter(s => !s.auto);
-    let html = '';
-    if (auto.length) {
-      html += `<optgroup label="Directories">${auto.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</optgroup>`;
+    if (sel) {
+      const list = this._all();
+      if (!list.length) {
+        sel.innerHTML = '<option disabled>No sessions saved</option>';
+      } else {
+        const auto = list.filter(s => s.auto);
+        const manual = list.filter(s => !s.auto);
+        let html = '';
+        if (auto.length) {
+          html += `<optgroup label="Directories">${auto.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</optgroup>`;
+        }
+        if (manual.length) {
+          html += `<optgroup label="Saved sessions">${manual.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</optgroup>`;
+        }
+        sel.innerHTML = html;
+      }
     }
-    if (manual.length) {
-      html += `<optgroup label="Saved sessions">${manual.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</optgroup>`;
+    this.renderDirSelector();
+  },
+
+  renderDirSelector() {
+    const el = document.getElementById('dir-selector');
+    const sep = document.getElementById('dir-selector-sep');
+    if (!el) return;
+    const auto = this._all().filter(s => s.auto);
+    if (auto.length === 0) {
+      el.style.display = 'none';
+      if (sep) sep.style.display = 'none';
+      return;
     }
-    sel.innerHTML = html;
+    el.style.display = '';
+    if (sep) sep.style.display = '';
+    const currentId = appConfig?._dirId ? `auto_${appConfig._dirId}` : null;
+    el.innerHTML = auto.map(s =>
+      `<option value="${s.id}"${s.id === currentId ? ' selected' : ''}>${s.name}</option>`
+    ).join('');
   },
 
   openSave() {
@@ -2750,13 +2783,10 @@ const Sessions = {
     toast(`Session "${name}" saved`);
   },
 
-  loadSelected() {
-    const sel = document.getElementById('sessions-list');
-    const id = sel?.value;
-    if (!id) { toast('Select a session first'); return; }
+  loadById(id) {
     const session = this._all().find(s => s.id === id);
-    if (!session) return;
-    appConfig = { courseUrl: session.courseUrl, coursePassword: session.coursePassword, videos: session.videos || [] };
+    if (!session) { toast('Session not found'); return; }
+    appConfig = { courseUrl: session.courseUrl, coursePassword: session.coursePassword, videos: session.videos || [], _dirId: session._dirId, _dirName: session._dirName };
     ExternalVideos.save([]);
     renderFileList();
     const allVids = appConfig.videos;
@@ -2780,7 +2810,23 @@ const Sessions = {
         urlLink.style.display = 'flex';
       } else { urlLink.style.display = 'none'; }
     }
-    toast(`Session "${session.name}" loaded`);
+    const pwBar = document.getElementById('pw-bar');
+    if (pwBar) pwBar.style.display = session.coursePassword ? '' : 'none';
+    toast(`Loaded: ${session.name}`);
+  },
+
+  loadSelected() {
+    const sel = document.getElementById('sessions-list');
+    const id = sel?.value;
+    if (!id) { toast('Select a session first'); return; }
+    this.loadById(id);
+  },
+
+  switchDir(id) {
+    if (!id) return;
+    const sidebarSel = document.getElementById('sessions-list');
+    if (sidebarSel) sidebarSel.value = id;
+    this.loadById(id);
   },
 
   autoSave(dirId, dirName) {
@@ -2792,6 +2838,8 @@ const Sessions = {
       id,
       name: `📁 ${dirName}`,
       auto: true,
+      _dirId: dirId,
+      _dirName: dirName,
       savedAt: new Date().toISOString(),
       courseUrl: appConfig?.courseUrl || '',
       coursePassword: appConfig?.coursePassword || '',
@@ -3190,7 +3238,7 @@ async function init() {
   {
     const allVids = [...(appConfig.videos || []), ...ExternalVideos.load()];
     if (allVids.length > 0) {
-      const lastId = localStorage.getItem('oc_last_video_id');
+      const lastId = localStorage.getItem(`oc_last_video_id_${appConfig?._dirId || 'default'}`);
       const toLoad = allVids.find(v => v.id === lastId) || allVids[0];
       Video.load(toLoad);
     }
@@ -3222,6 +3270,20 @@ async function init() {
   }
   Sessions.render();
   initSection('sessions', false);
+
+  // Poll every 3 s for proxy directory change — if _dirId shifts, reload the page so
+  // the user always sees the content of the directory that was started most recently.
+  {
+    const _activeDirId = appConfig._dirId || null;
+    setInterval(async () => {
+      try {
+        const r = await fetch('course-viewer.config.json', { cache: 'no-store' });
+        if (!r.ok) return;
+        const cfg = await r.json();
+        if (cfg._dirId && cfg._dirId !== _activeDirId) location.reload();
+      } catch { /* proxy not running — ignore */ }
+    }, 3000);
+  }
 
   // Demo mode: show banner + pre-open the demo notes tab
   if (_isDemoMode) {
