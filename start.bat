@@ -119,7 +119,7 @@ echo.
 echo Starting proxy server on port %PORT%...
 echo Course Viewer at: http://localhost:%PORT%/
 
-start /B cmd /C "ping 127.0.0.1 -n 3 >nul && start http://localhost:%PORT%/"
+start /B cmd /C "ping 127.0.0.1 -n 3 >nul && start http://localhost:%PORT%/?%random%%random%"
 
 cd /d "!DIR!"
 set "OC_PORT=%PORT%"
