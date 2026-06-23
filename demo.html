@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Course Notes — The Missing Semester</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    line-height: 1.7;
+    padding: 28px 32px;
+    font-size: 14px;
+  }
+  a { color: #7c8cf8; text-decoration: underline; }
+  h1 { font-size: 1.5em; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  h2 { font-size: 1.1em; font-weight: 600; color: #7c8cf8; margin: 24px 0 8px; border-bottom: 1px solid #2d3154; padding-bottom: 5px; }
+  h3 { font-size: .95em; font-weight: 600; color: #a5b4fc; margin: 16px 0 6px; }
+  p  { margin-bottom: 10px; color: #cbd5e1; }
+  ul { padding-left: 1.4em; margin-bottom: 10px; }
+  li { margin-bottom: 4px; color: #cbd5e1; }
+  code { background: #1e2947; padding: 2px 6px; border-radius: 4px; font-family: 'Fira Code', monospace; font-size: .88em; color: #a5b4fc; }
+  .badge {
+    display: inline-block; background: #1e2947; border: 1px solid #3b4fd8;
+    color: #7c8cf8; border-radius: 999px; padding: 2px 10px; font-size: 11px;
+    margin: 0 4px 4px 0;
+  }
+  .info-box {
+    background: #1a1d2e; border: 1px solid #3b4fd8; border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 20px;
+  }
+  .info-box p { margin-bottom: 6px; }
+  .lecture-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px; margin-bottom: 16px;
+  }
+  .lecture-card {
+    background: #151829; border: 1px solid #2d3154; border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .lecture-card .num { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; }
+  .lecture-card .title { font-size: 13px; font-weight: 600; color: #e2e8f0; margin: 3px 0 6px; }
+  .lecture-card .topics { font-size: 11px; color: #64748b; }
+  .tip {
+    background: #0f2714; border-left: 3px solid #22c55e;
+    padding: 10px 14px; border-radius: 0 6px 6px 0;
+    margin-bottom: 12px; font-size: 13px; color: #86efac;
+  }
+  .divider { border: none; border-top: 1px solid #2d3154; margin: 24px 0; }
+  .footer { color: #475569; font-size: 11px; margin-top: 32px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="info-box">
+  <p style="font-size:11px;color:#7c8cf8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📋 Demo Mode — Course Viewer</p>
+  <h1>The Missing Semester of Your CS Education</h1>
+  <p style="margin-top:8px">A series of lectures by MIT covering the tools and techniques that computer science courses don't teach — but that every developer needs.</p>
+  <div style="margin-top:12px">
+    <span class="badge">MIT CSAIL</span>
+    <span class="badge">Open Access</span>
+    <span class="badge">11 Lectures</span>
+    <span class="badge">~10 hours</span>
+  </div>
+</div>
+
+<div class="tip">
+  💡 This is a <strong>live demo</strong> of Course Viewer. Play any video from the list on the left, navigate between lectures, and take notes in the Notes panel. Run <code>start.sh</code> / <code>start.bat</code> locally to use your own course materials.
+</div>
+
+<h2>Lectures</h2>
+<div class="lecture-grid">
+  <div class="lecture-card">
+    <div class="num">Lecture 1</div>
+    <div class="title">Course Overview + The Shell</div>
+    <div class="topics">bash, navigation, pipes, redirection</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 2</div>
+    <div class="title">Shell Tools &amp; Scripting</div>
+    <div class="topics">bash scripts, find, grep, wildcards</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 3</div>
+    <div class="title">Editors (Vim)</div>
+    <div class="topics">modal editing, motions, plugins</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 4</div>
+    <div class="title">Data Wrangling</div>
+    <div class="topics">sed, awk, sort, regex, pipelines</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 5</div>
+    <div class="title">Command-line Environment</div>
+    <div class="topics">job control, tmux, dotfiles, SSH</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 6</div>
+    <div class="title">Version Control (Git)</div>
+    <div class="topics">data model, branching, remotes</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 7</div>
+    <div class="title">Debugging &amp; Profiling</div>
+    <div class="topics">gdb, strace, perf, flamegraphs</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 8</div>
+    <div class="title">Metaprogramming</div>
+    <div class="topics">make, CI, semantic versioning, testing</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 9</div>
+    <div class="title">Security &amp; Cryptography</div>
+    <div class="topics">entropy, hashing, encryption, SSH keys</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 10</div>
+    <div class="title">Potpourri</div>
+    <div class="topics">daemons, FUSE, APIs, Jupyter</div>
+  </div>
+  <div class="lecture-card">
+    <div class="num">Lecture 11</div>
+    <div class="title">Q&amp;A</div>
+    <div class="topics">OS choices, VMs, vim vs emacs, 2FA</div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<h2>How to use Course Viewer</h2>
+
+<h3>Video Player</h3>
+<ul>
+  <li>Click any lecture in the left panel to load it</li>
+  <li>Subtitles load automatically — toggle with the <code>CC</code> button</li>
+  <li>Use the subtitle search to jump to any spoken word</li>
+  <li>Your playback position is saved automatically</li>
+</ul>
+
+<h3>Course Reader (this panel)</h3>
+<ul>
+  <li>Open PDFs, HTML pages, or Markdown files as tabs</li>
+  <li>Paste any URL in the input bar and press <kbd>+</kbd></li>
+  <li>Zoom in/out with the <code>−</code> / <code>+</code> controls</li>
+</ul>
+
+<h3>Notes</h3>
+<ul>
+  <li>Markdown editor with live preview — click the <code>Preview</code> tab</li>
+  <li>Notes persist per directory in <code>localStorage</code></li>
+  <li>Export notes to a <code>.md</code> file at any time</li>
+</ul>
+
+<hr class="divider">
+
+<h2>Run locally for full features</h2>
+<p>The local version adds video streaming, subtitle sync, directory browsing, and session management.</p>
+
+<h3>Windows</h3>
+<p><code>powershell -c "iwr https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.bat -OutFile start.bat"; .\start.bat</code></p>
+
+<h3>macOS / Linux</h3>
+<p><code>curl -fsSL https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.sh -o start.sh &amp;&amp; bash start.sh</code></p>
+
+<hr class="divider">
+
+<p style="font-size:12px;color:#475569;margin-top:4px">
+  Course content: <a href="https://missing.csail.mit.edu/" target="_blank" rel="noopener">missing.csail.mit.edu</a> ·
+  License: <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a> ·
+  Source: <a href="https://github.com/missing-semester/missing-semester" target="_blank" rel="noopener">GitHub</a>
+</p>
+
+<div class="footer">
+  Course Viewer — <a href="https://github.com/patchamama/Course-viewer" target="_blank" rel="noopener">github.com/patchamama/Course-viewer</a>
+</div>
+
+</body>
+</html>
