@@ -1,5 +1,5 @@
 # Course-specific files (not part of the app)
-config.json
+course-viewer.config.json
 course.readme.txt
 
 # Video and subtitle files

@@ -29,10 +29,10 @@ PROXY_PATH_PREFIX = '/proxy'
 CDN_HOST = 'cdn.articulate.com'
 CDN_PROXY_PATH_PREFIX = '/proxy-cdn'
 
-# Read password from config.json
+# Read password from course-viewer.config.json
 _password = 'Handout4EFB'
 try:
-    with open(os.path.join(STATIC_DIR, 'config.json'), 'r', encoding='utf-8') as f:
+    with open(os.path.join(STATIC_DIR, 'course-viewer.config.json'), 'r', encoding='utf-8') as f:
         _cfg = json.load(f)
         _password = _cfg.get('coursePassword', _password)
 except Exception:
@@ -249,8 +249,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         DOC_EXTS = {'.pdf', '.md', '.html', '.htm', '.epub', '.txt'}
         IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'}
         EXCLUDE_NAMES = {
-            'index.html', 'open_course.html', 'course.readme.txt',
-            'config.json', 'config.json.example', 'readme.md'
+            'course-viewer.html', 'index.html', 'open_course.html', 'course.readme.txt',
+            'course-viewer.config.json', 'course-viewer.config.json.example', 'readme.md'
         }
         EXCLUDE_EXTS = {'.py', '.sh', '.bat', '.gitignore', '.json'}
         docs = []
@@ -308,7 +308,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             body = self.rfile.read(length)
             cfg = json.loads(body)
             cfg.pop('_dirId', None)
-            config_path = os.path.join(STATIC_DIR, 'config.json')
+            config_path = os.path.join(STATIC_DIR, 'course-viewer.config.json')
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(cfg, f, ensure_ascii=False, indent=2)
             resp = b'{"ok":true}'
@@ -326,7 +326,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         raw = self.path.split('?')[0].split('#')[0]
         raw = urllib.parse.unquote(raw)
         if raw in ('', '/'):
-            raw = '/index.html'
+            raw = '/course-viewer.html'
         filepath = os.path.normpath(os.path.join(STATIC_DIR, raw.lstrip('/')))
         if not filepath.startswith(STATIC_DIR):
             self.send_error(403)
@@ -340,8 +340,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         ext = os.path.splitext(filepath)[1].lower()
         mime = MIME_MAP.get(ext, mimetypes.guess_type(filepath)[0] or 'application/octet-stream')
 
-        # Inject _dirId into config.json
-        if os.path.basename(filepath) == 'config.json' and os.path.dirname(filepath) == STATIC_DIR:
+        # Inject _dirId into course-viewer.config.json
+        if os.path.basename(filepath) == 'course-viewer.config.json' and os.path.dirname(filepath) == STATIC_DIR:
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     cfg = json.load(f)

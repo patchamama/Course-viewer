@@ -690,7 +690,7 @@
         <span id="course-url-text"></span>
       </a>
       <div style="flex:1"></div>
-      <button class="hdr-btn" style="width:26px;height:26px" title="Save configuration to config.json" onclick="saveConfig()">
+      <button class="hdr-btn" style="width:26px;height:26px" title="Save configuration to course-viewer.config.json" onclick="saveConfig()">
         <i data-lucide="save" size="13"></i>
       </button>
       <button class="pnl-mode-btn active" id="btn-panelb-course" onclick="PanelB.setMode('course')" title="Course Reader">
@@ -2574,7 +2574,7 @@ async function saveConfig() {
       appConfig.videos = mergedVideos;
       ExternalVideos.save([]);
       renderFileList();
-      toast('Configuration saved to config.json');
+      toast('Configuration saved to course-viewer.config.json');
     } else {
       toast('Save failed — check proxy is running');
     }
@@ -2623,7 +2623,7 @@ async function init() {
 
   // Load config
   try {
-    const r = await fetch('config.json');
+    const r = await fetch('course-viewer.config.json');
     appConfig = await r.json();
   } catch {
     // Fallback: inline defaults (so app works without HTTP server for basic UI)

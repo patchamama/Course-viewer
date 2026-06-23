@@ -9,7 +9,7 @@ echo "=== Course Viewer Launcher ==="
 echo "Directory: $DIR"
 
 # ── Auto-download required app files from GitHub if missing ──────────────────
-for file in proxy.py index.html; do
+for file in proxy.py course-viewer.html; do
   if [[ ! -f "$DIR/$file" ]]; then
     echo "Downloading $file from GitHub..."
     if command -v curl &>/dev/null; then
@@ -44,9 +44,9 @@ else
   echo "INFO: course.readme.txt not found — courseUrl and coursePassword will be empty"
 fi
 
-# ── Generate config.json (only if not already present) ───────────────────────
-if [[ -f "$DIR/config.json" ]]; then
-  echo "config.json already exists — skipping generation"
+# ── Generate course-viewer.config.json (only if not already present) ───────────────────────
+if [[ -f "$DIR/course-viewer.config.json" ]]; then
+  echo "course-viewer.config.json already exists — skipping generation"
 else
   entries=""
   first=1
@@ -95,7 +95,7 @@ else
     $entry"; fi
   done < <(find "$DIR" -maxdepth 1 -name "*.mp4" -print0 | sort -z)
 
-  cat > "$DIR/config.json" <<EOF
+  cat > "$DIR/course-viewer.config.json" <<EOF
 {
   "courseUrl": "$COURSE_URL",
   "coursePassword": "$COURSE_PASSWORD",
@@ -104,7 +104,7 @@ else
   ]
 }
 EOF
-  echo "Generated config.json ($(find "$DIR" -maxdepth 1 -name "*.mp4" | wc -l | tr -d ' ') videos)"
+  echo "Generated course-viewer.config.json ($(find "$DIR" -maxdepth 1 -name "*.mp4" | wc -l | tr -d ' ') videos)"
 fi
 
 # ── Start server ─────────────────────────────────────────────────────────────

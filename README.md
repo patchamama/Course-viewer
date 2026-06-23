@@ -29,7 +29,7 @@
 ### Course Videos List
 - Displays config videos and user-added external videos in one merged list
 - **Auto-adds** YouTube / local videos to the list when opened via the add-video flow
-- **Save Config** button merges all user-added videos into permanent `config.json`
+- **Save Config** button merges all user-added videos into permanent `course-viewer.config.json`
 - Delete user-added entries individually
 
 ### Markers and Notes
@@ -39,7 +39,7 @@
 - Markdown notes editor with live preview (embedded or in bottom panel)
 
 ### Self-Bootstrapping Launcher
-- `start.bat` (Windows) and `start.sh` (Mac/Linux) **auto-download** `proxy.py` and `index.html` from this GitHub repo if they are missing from the folder
+- `start.bat` (Windows) and `start.sh` (Mac/Linux) **auto-download** `proxy.py` and `course-viewer.html` from this GitHub repo if they are missing from the folder
 - No installation required beyond Python 3
 
 ---
@@ -49,7 +49,7 @@
 | Requirement | Notes |
 |---|---|
 | **Python 3.8+** | [python.org](https://python.org) — add to PATH on Windows |
-| **Internet** (first run only) | Downloads `proxy.py` and `index.html` from GitHub |
+| **Internet** (first run only) | Downloads `proxy.py` and `course-viewer.html` from GitHub |
 | No other dependencies | Pure stdlib Python; all JS loaded from CDN |
 
 ---
@@ -68,7 +68,7 @@
 3. Run: `bash start.sh`
 4. App opens automatically at **http://localhost:8080/**
 
-The launcher auto-downloads `proxy.py` and `index.html` from GitHub on the first run.
+The launcher auto-downloads `proxy.py` and `course-viewer.html` from GitHub on the first run.
 
 ---
 
@@ -85,7 +85,7 @@ coursePassword: YourPassword
 
 ### Video files
 
-Place `.mp4` files in the course folder. The launcher auto-detects them and generates `config.json` on first run. Matching `.srt` / `.vtt` subtitle files are loaded automatically by filename.
+Place `.mp4` files in the course folder. The launcher auto-detects them and generates `course-viewer.config.json` on first run. Matching `.srt` / `.vtt` subtitle files are loaded automatically by filename.
 
 YouTube ID in filename enables YouTube fallback when the local file is 0 bytes:
 - `Video_Name_[XXXXXXXXXXX].mp4`
@@ -100,9 +100,9 @@ If `course.readme.txt` is absent or has no `courseUrl`, the app **auto-detects l
 | PDF, MD, HTML, EPUB, TXT | Opened as reader tabs |
 | PNG, JPG, SVG, WebP, GIF | Collected into an image gallery tab |
 
-### config.json schema
+### course-viewer.config.json schema
 
-See [`config.json.example`](config.json.example) for the full structure.
+See [`course-viewer.config.json.example`](course-viewer.config.json.example) for the full structure.
 
 ---
 
@@ -112,11 +112,11 @@ See [`config.json.example`](config.json.example) for the full structure.
 your-course-folder/
 ├── start.bat              ← Windows launcher
 ├── start.sh               ← Mac/Linux launcher
-├── index.html             ← App UI (auto-downloaded from GitHub)
+├── course-viewer.html             ← App UI (auto-downloaded from GitHub)
 ├── proxy.py               ← Local HTTP proxy server (auto-downloaded)
 ├── course.readme.txt      ← Course URL + password (optional, git-ignored)
-├── config.json            ← Generated/saved config (git-ignored)
-├── config.json.example    ← Schema reference
+├── course-viewer.config.json            ← Generated/saved config (git-ignored)
+├── course-viewer.config.json.example    ← Schema reference
 ├── video_[YtId].mp4       ← Video files (git-ignored)
 ├── video_[YtId].srt       ← Subtitle files (git-ignored)
 └── document.pdf           ← Local documents (git-ignored, auto-opened as tabs)

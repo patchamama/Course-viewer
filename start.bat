@@ -9,7 +9,7 @@ echo === Course Viewer Launcher ===
 echo Directory: %DIR%
 
 :: ── Auto-download required app files from GitHub if missing ──────────────────
-for %%F in (proxy.py index.html) do (
+for %%F in (proxy.py course-viewer.html) do (
   if not exist "%DIR%\%%F" (
     echo Downloading %%F from GitHub...
     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -22,13 +22,13 @@ for %%F in (proxy.py index.html) do (
   )
 )
 
-:: Only generate config.json if it does not already exist
-if exist "%DIR%\config.json" (
-  echo config.json already exists -- skipping generation
+:: Only generate course-viewer.config.json if it does not already exist
+if exist "%DIR%\course-viewer.config.json" (
+  echo course-viewer.config.json already exists -- skipping generation
   goto :start_server
 )
 
-:: Generate config.json via PowerShell (reads course.readme.txt for URL and password)
+:: Generate course-viewer.config.json via PowerShell (reads course.readme.txt for URL and password)
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$dir = '%DIR:\=\\%';" ^
   "$courseUrl = '';" ^
@@ -59,11 +59,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "};" ^
   "$config = [ordered]@{ courseUrl=$courseUrl; coursePassword=$coursePassword; videos=$videos };" ^
   "$json = $config | ConvertTo-Json -Depth 5;" ^
-  "Set-Content -Path (Join-Path $dir 'config.json') -Value $json -Encoding UTF8;" ^
-  "Write-Host ('Generated config.json (' + $mp4s.Count + ' videos)')"
+  "Set-Content -Path (Join-Path $dir 'course-viewer.config.json') -Value $json -Encoding UTF8;" ^
+  "Write-Host ('Generated course-viewer.config.json (' + $mp4s.Count + ' videos)')"
 
 if %errorlevel% neq 0 (
-  echo ERROR: PowerShell failed to generate config.json
+  echo ERROR: PowerShell failed to generate course-viewer.config.json
   pause & exit /b 1
 )
 
