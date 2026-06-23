@@ -57,10 +57,14 @@
   .hdr-sep { width: 1px; height: 24px; background: #2d3154; margin: 0 4px; flex-shrink: 0; }
 
   #dir-selector {
+    display: none;
     background: #0f1117; color: #a5b4fc; border: 1px solid #3b4fd8;
-    border-radius: 6px; padding: 2px 8px; font-size: 11px; max-width: 200px;
+    border-radius: 6px; padding: 2px 8px; font-size: 11px; max-width: 220px;
     cursor: pointer; outline: none; height: 26px; flex-shrink: 0;
   }
+  #dir-selector.visible { display: inline-block; }
+  #dir-selector-sep { display: none; }
+  #dir-selector-sep.visible { display: block; }
   #dir-selector:hover { border-color: #7c8cf8; color: #e2e8f0; }
   html.light #dir-selector { background: #0f172a; color: #818cf8; border-color: #3b82f6; }
 
@@ -494,8 +498,8 @@
 <header id="app-header">
   <span id="app-title">▶ Course Viewer</span><a id="app-version" href="https://github.com/patchamama/Course-viewer/releases" target="_blank" rel="noopener" style="font-size:9px;color:#3b4fd8;margin-left:5px;align-self:center;text-decoration:none;letter-spacing:.3px;flex-shrink:0" title="View releases">v1.0.0</a>
   <div class="hdr-sep"></div>
-  <select id="dir-selector" style="display:none" title="Switch directory" onchange="Sessions.switchDir(this.value)"></select>
-  <div class="hdr-sep" id="dir-selector-sep" style="display:none"></div>
+  <select id="dir-selector" title="Switch directory" onchange="Sessions.switchDir(this.value)" size="1"></select>
+  <div class="hdr-sep" id="dir-selector-sep"></div>
 
   <!-- Layout: horizontal / vertical -->
   <button class="hdr-btn active" id="btn-layout-h" title="Horizontal layout" onclick="Layout.setMode('horizontal')">
@@ -2736,28 +2740,31 @@ const Sessions = {
   },
 
   renderDirSelector() {
-    const el = document.getElementById('dir-selector');
+    const el  = document.getElementById('dir-selector');
     const sep = document.getElementById('dir-selector-sep');
     if (!el) return;
-    const auto = this._all().filter(s => s.auto);
-    const currentId = appConfig?._dirId ? `auto_${appConfig._dirId}` : null;
-    // Build current-dir entry even if not yet in sessions (first load)
-    const currentName = appConfig?._dirName ? `📁 ${appConfig._dirName}` : null;
-    if (auto.length === 0 && !currentName) {
-      el.style.display = 'none';
-      if (sep) sep.style.display = 'none';
+
+    const auto      = this._all().filter(s => s.auto);
+    const currentId = appConfig?._dirId   ? `auto_${appConfig._dirId}`   : null;
+    const dirName   = appConfig?._dirName || appConfig?._dirId || null;
+
+    // Build entries: auto-sessions from localStorage + current dir if not yet saved
+    const entries = [...auto];
+    if (currentId && dirName && !entries.find(s => s.id === currentId)) {
+      entries.unshift({ id: currentId, name: `📁 ${dirName}` });
+    }
+
+    if (entries.length === 0) {
+      el.classList.remove('visible');
+      if (sep) sep.classList.remove('visible');
       return;
     }
-    el.style.display = 'inline-block';
-    if (sep) sep.style.display = '';
-    // If current dir not yet in list, prepend it
-    let entries = [...auto];
-    if (currentId && !entries.find(s => s.id === currentId) && currentName) {
-      entries.unshift({ id: currentId, name: currentName });
-    }
+
     el.innerHTML = entries.map(s =>
       `<option value="${s.id}"${s.id === currentId ? ' selected' : ''}>${s.name}</option>`
     ).join('');
+    el.classList.add('visible');
+    if (sep) sep.classList.add('visible');
   },
 
   openSave() {
@@ -3275,6 +3282,9 @@ async function init() {
   if (_hasBackend && appConfig._dirId) {
     Sessions.autoSave(appConfig._dirId, appConfig._dirName || appConfig._dirId);
   }
+  // Always render the dir selector immediately — even before Sessions.render()
+  // so the current directory name appears in the header on every load
+  Sessions.renderDirSelector();
   Sessions.render();
   initSection('sessions', false);
 
