@@ -116,6 +116,11 @@ del "!_PS2!" 2>nul
 :: ─────────────────────────────────────────────────────────────────────────────
 :start_server
 echo.
+
+:: Kill any existing proxy on this port so the new directory always wins
+for /f "tokens=5" %%P in ('netstat -aon 2^>nul ^| findstr /R ":%PORT% .*LISTENING"') do taskkill /F /PID %%P >nul 2>&1
+ping 127.0.0.1 -n 2 >nul
+
 echo Starting proxy server on port %PORT%...
 echo Course Viewer at: http://localhost:%PORT%/
 

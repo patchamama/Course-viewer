@@ -158,6 +158,12 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 echo ""
+# Kill any existing proxy on this port so the new directory always wins
+if lsof -ti tcp:$PORT &>/dev/null; then
+  lsof -ti tcp:$PORT | xargs kill -9 2>/dev/null
+  sleep 0.5
+fi
+
 echo "Starting proxy server on port $PORT..."
 echo "Open: http://localhost:$PORT/"
 
