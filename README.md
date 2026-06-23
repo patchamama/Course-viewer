@@ -2,6 +2,15 @@
 
 **Live demo:** https://patchamama.github.io/Course-viewer/course-viewer.html
 
+```powershell
+# Windows — run in any folder with your course files
+powershell -c "iwr https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.bat -OutFile start.bat"; .\start.bat
+```
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.sh -o start.sh && bash start.sh
+```
+
 > A local-first, offline-capable course companion app. Stream local videos with instant seeking, display multilingual subtitles, proxy Articulate Rise courses through localhost, and read PDFs and documents — all from a self-contained tool that runs entirely in your browser with zero cloud dependency.
 
 ## Features

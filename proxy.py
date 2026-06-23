@@ -218,6 +218,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._proxy(TARGET_HOST, PROXY_PATH_PREFIX)
         elif self.path == '/list-local-files':
             self._list_local_files()
+        elif self.path.startswith('/list-directory'):
+            self._list_directory()
         elif self.path.startswith('/local-video'):
             self._serve_local_video()
         else:
@@ -244,6 +246,43 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         self.end_headers()
 
+    # ─── List directory contents for the directory browser ────────────────────
+    def _list_directory(self):
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        rel = urllib.parse.unquote(params.get('path', [''])[0]).strip('/')
+        target = os.path.normpath(os.path.join(STATIC_DIR, rel)) if rel else STATIC_DIR
+        # Prevent path traversal outside STATIC_DIR's parent tree (allow going up from STATIC_DIR)
+        # We allow browsing parent dirs — user explicitly requested it
+        if not os.path.isdir(target):
+            self.send_error(404, 'Directory not found')
+            return
+        entries = {'path': rel, 'dirs': [], 'files': []}
+        try:
+            for name in sorted(os.listdir(target), key=str.lower):
+                if name.startswith('.'):
+                    continue
+                full = os.path.join(target, name)
+                if os.path.isdir(full):
+                    entries['dirs'].append(name)
+                elif os.path.isfile(full):
+                    ext = os.path.splitext(name)[1].lower()
+                    size = os.path.getsize(full)
+                    entries['files'].append({'name': name, 'ext': ext, 'size': size})
+        except PermissionError:
+            pass
+        # Indicate if parent navigation is available
+        entries['hasParent'] = target != os.path.abspath(os.sep)
+        resp = json.dumps(entries, ensure_ascii=False).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(resp)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        if self.command != 'HEAD':
+            self.wfile.write(resp)
+
     # ─── List local docs and images for auto-open in Course Reader ───────────
     def _list_local_files(self):
         DOC_EXTS = {'.pdf', '.md', '.html', '.htm', '.epub', '.txt'}
@@ -253,15 +292,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             'course-viewer.config.json', 'course-viewer.config.json.example', 'readme.md'
         }
         EXCLUDE_EXTS = {'.py', '.sh', '.bat', '.gitignore', '.json'}
+        # Optional path param for subdirectory
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        rel = urllib.parse.unquote(params.get('path', [''])[0]).strip('/')
+        scan_dir = os.path.normpath(os.path.join(STATIC_DIR, rel)) if rel else STATIC_DIR
+        if not os.path.isdir(scan_dir):
+            scan_dir = STATIC_DIR
         docs = []
         images = []
         try:
-            for fname in sorted(os.listdir(STATIC_DIR)):
+            for fname in sorted(os.listdir(scan_dir)):
                 if fname.startswith('.') or fname.startswith('_'):
                     continue
                 if fname.lower() in EXCLUDE_NAMES:
                     continue
-                fpath = os.path.join(STATIC_DIR, fname)
+                fpath = os.path.join(scan_dir, fname)
                 if not os.path.isfile(fpath):
                     continue
                 ext = os.path.splitext(fname)[1].lower()

@@ -762,6 +762,9 @@
             <i data-lucide="file" size="11"></i>
             <input type="file" accept=".html,.htm,.pdf" style="display:none" onchange="TabManager.openFileInTab(this)">
           </label>
+          <button id="btn-dir-browser" class="btn btn-ghost" style="padding:2px 5px;flex-shrink:0;display:none" onclick="DirBrowser.openTab()" title="Browse directory">
+            <i data-lucide="folder-tree" size="11"></i>
+          </button>
         </div>
       </div>
       <div id="reader-frames-container">
@@ -1165,6 +1168,7 @@ const TabManager = {
     container.innerHTML = '';
     for (const tab of this.tabs) {
       if (tab.type === 'image-viewer') this._createImageViewerFrame(tab);
+      else if (tab.type === 'dir-browser') { /* DirBrowser creates its own element */ }
       else this._createFrame(tab);
     }
   },
@@ -1229,7 +1233,7 @@ const TabManager = {
       const active = tab.id === this.activeId;
       frame.style.visibility = active ? 'visible' : 'hidden';
       frame.style.pointerEvents = active ? 'auto' : 'none';
-      if (active && tab.type !== 'image-viewer') frame.style.zoom = zoom === 1.0 ? '' : zoom;
+      if (active && tab.type !== 'image-viewer' && tab.type !== 'dir-browser') frame.style.zoom = zoom === 1.0 ? '' : zoom;
     }
   },
 
@@ -1300,14 +1304,16 @@ const TabManager = {
 
   _save() {
     if (!this._storageKey) return;
-    const toSave = this.tabs.map(t => {
-      const s = {
-        id: t.id, title: t.title, type: t.type, scrollY: t.scrollY || 0,
-        url: t.url && t.url.startsWith('blob:') ? '' : (t.url || '')
-      };
-      if (t.type === 'image-viewer' && t.images) s.images = t.images;
-      return s;
-    });
+    const toSave = this.tabs
+      .filter(t => t.type !== 'dir-browser')
+      .map(t => {
+        const s = {
+          id: t.id, title: t.title, type: t.type, scrollY: t.scrollY || 0,
+          url: t.url && t.url.startsWith('blob:') ? '' : (t.url || '')
+        };
+        if (t.type === 'image-viewer' && t.images) s.images = t.images;
+        return s;
+      });
     localStorage.setItem(this._storageKey, JSON.stringify({ tabs: toSave, activeId: this.activeId }));
   }
 };
@@ -1564,7 +1570,7 @@ const Video = {
       fetch(encodedPath, { method: 'HEAD' })
         .then(r => {
           const size = parseInt(r.headers.get('content-length') || '0', 10);
-          if (r.ok && size > 0) this._loadLocalByPath(encodedPath, wrapper);
+          if (r.ok && size > 10240) this._loadLocalByPath(encodedPath, wrapper);
           else loadFallback();
         })
         .catch(loadFallback);
@@ -2833,6 +2839,143 @@ const DirectoryPicker = {
 };
 
 // ────────────────────────────────────────────────────────────
+// DIRECTORY BROWSER
+// ────────────────────────────────────────────────────────────
+const DirBrowser = {
+  _tabId: 'dir-browser',
+  _currentPath: '',
+
+  openTab(path) {
+    this._currentPath = path || '';
+    const existing = TabManager.tabs.find(t => t.id === this._tabId);
+    if (existing) {
+      TabManager.switchTo(this._tabId);
+      this._render(this._currentPath);
+    } else {
+      const tab = { id: this._tabId, title: '📁 Files', url: '', type: 'dir-browser', scrollY: 0 };
+      TabManager.tabs.push(tab);
+      TabManager.activeId = this._tabId;
+      TabManager._renderTabBar();
+      // Create the container div (not an iframe)
+      const container = document.getElementById('reader-frames-container');
+      if (container) {
+        const div = document.createElement('div');
+        div.id = `reader-frame-${this._tabId}`;
+        div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;color:#e2e8f0;font-size:12px;font-family:monospace';
+        container.appendChild(div);
+      }
+      TabManager._applyActiveTab();
+      TabManager._save();
+      this._render(this._currentPath);
+    }
+  },
+
+  async _render(path) {
+    const el = document.getElementById(`reader-frame-${this._tabId}`);
+    if (!el) return;
+    el.innerHTML = '<div style="padding:16px;color:#64748b">Loading…</div>';
+    try {
+      const r = await fetch(`/list-directory?path=${encodeURIComponent(path)}`);
+      if (!r.ok) throw new Error('Failed');
+      const data = await r.json();
+      this._currentPath = data.path;
+      this._renderHTML(el, data);
+    } catch {
+      el.innerHTML = '<div style="padding:16px;color:#f87171">Could not load directory. Is the proxy running?</div>';
+    }
+  },
+
+  _renderHTML(el, data) {
+    const DOC_EXTS = new Set(['.pdf','.md','.html','.htm','.epub','.txt']);
+    const IMG_EXTS = new Set(['.png','.jpg','.jpeg','.gif','.webp','.svg']);
+    const VIDEO_EXTS = new Set(['.mp4','.m4v','.mov','.mkv','.avi','.webm','.ogg']);
+
+    const pathParts = data.path ? data.path.split('/').filter(Boolean) : [];
+    const breadcrumb = ['<span style="cursor:pointer;color:#7c8cf8" onclick="DirBrowser._render(\'\')">root</span>'];
+    let acc = '';
+    for (const p of pathParts) {
+      acc += (acc ? '/' : '') + p;
+      const a = acc;
+      breadcrumb.push(`<span style="color:#64748b">/</span><span style="cursor:pointer;color:#7c8cf8" onclick="DirBrowser._render('${a}')">${p}</span>`);
+    }
+
+    const parentPath = pathParts.slice(0, -1).join('/');
+    const parentBtn = data.hasParent
+      ? `<div class="db-row" onclick="DirBrowser._render('${parentPath}')" style="color:#94a3b8">
+           <span style="font-size:14px">⬆</span> <span>..</span>
+         </div>`
+      : '';
+
+    const dirs = data.dirs.map(d => {
+      const childPath = data.path ? data.path + '/' + d : d;
+      return `<div class="db-row" style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;cursor:pointer;flex:1;color:#fbbf24" onclick="DirBrowser._render('${childPath}')">📁 ${d}</span>
+        <button class="btn btn-ghost" style="padding:1px 6px;font-size:10px;flex-shrink:0" title="Open as Course Viewer" onclick="DirBrowser._openAsViewer('${childPath}')">▶ Open</button>
+      </div>`;
+    });
+
+    const files = data.files.map(f => {
+      const ext = f.ext;
+      const filePath = (data.path ? data.path + '/' : '') + f.name;
+      const sizeStr = f.size > 1048576 ? (f.size/1048576).toFixed(1)+'MB' : f.size > 1024 ? (f.size/1024).toFixed(0)+'KB' : f.size+'B';
+      let icon = '📄';
+      let action = '';
+      if (DOC_EXTS.has(ext)) {
+        icon = ext === '.pdf' ? '📕' : ext === '.md' ? '📝' : '🌐';
+        action = `onclick="TabManager.openTab('${encodeURIComponent(filePath)}','${f.name}','custom')"`;
+      } else if (IMG_EXTS.has(ext)) {
+        icon = '🖼';
+        action = `onclick="ImageViewer.open('${encodeURIComponent(filePath)}')"`;
+      } else if (VIDEO_EXTS.has(ext)) {
+        icon = '🎬';
+        action = `onclick="Video.load({id:'dir_${encodeURIComponent(f.name)}',title:'${f.name}',localFile:'${filePath}',youtubeId:'',subtitleFile:''})"`;
+      }
+      return `<div class="db-row" style="display:flex;align-items:center;gap:8px;cursor:pointer" ${action}>
+        <span style="font-size:13px">${icon}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</span>
+        <span style="color:#64748b;font-size:10px;flex-shrink:0">${sizeStr}</span>
+      </div>`;
+    });
+
+    el.innerHTML = `
+      <style>
+        .db-row { padding:5px 12px; border-bottom:1px solid #1e2947; transition:background .1s; }
+        .db-row:hover { background:#1e2947; }
+      </style>
+      <div style="padding:10px 12px;background:#151829;border-bottom:1px solid #2d3154;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${breadcrumb.join('')}
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost" style="padding:2px 8px;font-size:10px" title="Open current directory as Course Viewer" onclick="DirBrowser._openAsViewer('${data.path || ''}')">▶ Open as Viewer</button>
+      </div>
+      ${parentBtn}
+      ${dirs.join('')}
+      ${files.length ? files.join('') : (dirs.length === 0 ? '<div style="padding:16px;color:#64748b">Empty directory</div>' : '')}
+    `;
+  },
+
+  async _openAsViewer(path) {
+    try {
+      const r = await fetch(`/list-local-files?path=${encodeURIComponent(path)}`);
+      toast(`Opening ${path || 'root'} as viewer…`);
+      if (r.ok) {
+        const { docs = [], images = [] } = await r.json();
+        // Close existing non-course, non-browser tabs
+        TabManager.tabs = TabManager.tabs.filter(t => t.type === 'course' || t.id === this._tabId);
+        for (const doc of docs) {
+          const fullPath = (path ? path + '/' : '') + doc;
+          const title = doc.length > 22 ? doc.substring(0, 20) + '…' : doc;
+          TabManager.openTab(encodeURIComponent(fullPath), title, 'custom');
+        }
+        if (images.length > 0) {
+          const imgPaths = images.map(img => encodeURIComponent((path ? path + '/' : '') + img));
+          TabManager.openImageViewer(imgPaths);
+        }
+      }
+    } catch { toast('Could not open viewer'); }
+  }
+};
+
+// ────────────────────────────────────────────────────────────
 // IMAGE VIEWER
 // ────────────────────────────────────────────────────────────
 const ImageViewer = {
@@ -2934,6 +3077,9 @@ async function init() {
   // Show/hide backend-dependent UI
   document.getElementById('btn-open-dir')?.style.setProperty('display',
     (!_hasBackend && window.showDirectoryPicker) ? '' : 'none');
+  // Show directory browser button only when backend is running
+  const btnDirBrowser = document.getElementById('btn-dir-browser');
+  if (btnDirBrowser) btnDirBrowser.style.display = _hasBackend ? '' : 'none';
   window._hasBackend = _hasBackend;
 
   // Render file list
