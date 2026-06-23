@@ -772,10 +772,13 @@
       </div>
       <!-- Notes mode inside Panel B -->
       <div id="panelb-notes-wrap">
-        <div style="display:flex;gap:4px;flex-shrink:0">
+        <div style="display:flex;gap:4px;flex-shrink:0;align-items:center">
           <button class="notes-tab active" id="pbn-tab-edit" onclick="PanelBNotes.setTab('edit')">Edit</button>
           <button class="notes-tab" id="pbn-tab-preview" onclick="PanelBNotes.setTab('preview')">Preview</button>
           <div style="flex:1"></div>
+          <button class="btn btn-ghost" style="padding:1px 5px;font-size:14px;line-height:1" onclick="NotesZoom.change(-0.1)" title="Smaller text">−</button>
+          <span id="panelb-notes-zoom-level" style="font-size:10px;min-width:28px;text-align:center;color:#94a3b8">100%</span>
+          <button class="btn btn-ghost" style="padding:1px 5px;font-size:14px;line-height:1" onclick="NotesZoom.change(0.1)" title="Larger text">+</button>
           <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Notes.exportMd()">
             <i data-lucide="download" size="11"></i> Export
           </button>
@@ -2633,10 +2636,12 @@ const NotesZoom = {
   },
   _apply() {
     const fs = this.level === 1.0 ? '' : (this.level * 14) + 'px';
-    const ids = ['notes-editor','notes-preview','panelb-notes-area','panelb-notes-preview'];
+    const ids = ['notes-editor','notes-preview','panelb-notes-editor','panelb-notes-preview'];
     for (const id of ids) { const e = document.getElementById(id); if (e) e.style.fontSize = fs; }
-    const lvl = document.getElementById('notes-zoom-level');
-    if (lvl) lvl.textContent = Math.round(this.level * 100) + '%';
+    const pct = Math.round(this.level * 100) + '%';
+    for (const id of ['notes-zoom-level','panelb-notes-zoom-level']) {
+      const e = document.getElementById(id); if (e) e.textContent = pct;
+    }
   }
 };
 
@@ -3137,6 +3142,12 @@ async function init() {
   }
 
   lucide.createIcons();
+
+  // Force repaint to fix header visibility at zoom 0.8 (browser layout quirk)
+  requestAnimationFrame(() => {
+    document.body.style.zoom = '0.801';
+    requestAnimationFrame(() => { document.body.style.zoom = '0.8'; });
+  });
 }
 
 // Modal keyboard shortcuts
