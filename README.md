@@ -1,5 +1,9 @@
 # Course Viewer
 
+[![Version](https://img.shields.io/badge/version-1.0.0-7c8cf8?style=flat-square)](https://github.com/patchamama/Course-viewer/releases)
+[![Live](https://img.shields.io/badge/demo-GitHub%20Pages-3b4fd8?style=flat-square)](https://patchamama.github.io/Course-viewer/course-viewer.html)
+[![License](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
+
 **Live demo:** https://patchamama.github.io/Course-viewer/course-viewer.html
 
 ```powershell

@@ -481,7 +481,7 @@
 
 <!-- ═══════════════════ HEADER ═══════════════════ -->
 <header id="app-header">
-  <span id="app-title">▶ Course Viewer</span>
+  <span id="app-title">▶ Course Viewer</span><a id="app-version" href="https://github.com/patchamama/Course-viewer/releases" target="_blank" rel="noopener" style="font-size:9px;color:#3b4fd8;margin-left:5px;align-self:center;text-decoration:none;letter-spacing:.3px;flex-shrink:0" title="View releases">v1.0.0</a>
   <div class="hdr-sep"></div>
 
   <!-- Layout: horizontal / vertical -->
@@ -965,6 +965,11 @@
 
 <!-- ═══════════════════ SCRIPT ═══════════════════ -->
 <script>
+// ────────────────────────────────────────────────────────────
+// VERSION
+// ────────────────────────────────────────────────────────────
+const APP_VERSION = '1.0.0';
+
 // ────────────────────────────────────────────────────────────
 // GLOBALS
 // ────────────────────────────────────────────────────────────
@@ -3056,6 +3061,8 @@ async function init() {
   Theme.init();
   Layout.init();
   Notes.init();
+  const verEl = document.getElementById('app-version');
+  if (verEl) verEl.textContent = 'v' + APP_VERSION;
   initVideoResize();
 
   // Detect backend + load config
