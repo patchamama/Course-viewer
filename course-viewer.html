@@ -3271,16 +3271,19 @@ async function init() {
   Sessions.render();
   initSection('sessions', false);
 
-  // Poll every 3 s for proxy directory change — if _dirId shifts, reload the page so
-  // the user always sees the content of the directory that was started most recently.
-  {
-    const _activeDirId = appConfig._dirId || null;
+  // Poll every 3 s for proxy directory change. Only runs when we already have a backend
+  // (_hasBackend + _dirId). Verifies course-viewer.html is accessible before reloading
+  // so we never navigate to a 404 while the new proxy is still starting up.
+  if (_hasBackend && appConfig._dirId) {
+    const _activeDirId = appConfig._dirId;
     setInterval(async () => {
       try {
         const r = await fetch('course-viewer.config.json', { cache: 'no-store' });
         if (!r.ok) return;
         const cfg = await r.json();
-        if (cfg._dirId && cfg._dirId !== _activeDirId) location.reload();
+        if (!cfg._dirId || cfg._dirId === _activeDirId) return;
+        const check = await fetch('course-viewer.html', { method: 'HEAD', cache: 'no-store' });
+        if (check.ok) location.reload();
       } catch { /* proxy not running — ignore */ }
     }, 3000);
   }
