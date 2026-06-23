@@ -22,8 +22,11 @@
     color: #e2e8f0;
     font-family: 'Inter', system-ui, sans-serif;
     zoom: 0.8;
-    height: 125%;
+    height: 125vh;
+    height: calc(100dvh / 0.8);
   }
+  /* Panel B children handle their own scroll; body overflow must stay hidden so reader fills height */
+  #panel-b-body { overflow: hidden; }
   html.light body { background: #f1f5f9; color: #1e293b; }
 
   /* ── Header ── */

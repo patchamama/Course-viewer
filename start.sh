@@ -8,23 +8,67 @@ GITHUB_RAW="https://raw.githubusercontent.com/patchamama/Course-viewer/main"
 echo "=== Course Viewer Launcher ==="
 echo "Directory: $DIR"
 
-# ── Auto-download required app files from GitHub if missing ──────────────────
-for file in proxy.py course-viewer.html; do
-  if [[ ! -f "$DIR/$file" ]]; then
-    echo "Downloading $file from GitHub..."
-    if command -v curl &>/dev/null; then
-      curl -fsSL "$GITHUB_RAW/$file" -o "$DIR/$file" \
-        || { echo "ERROR: failed to download $file via curl"; exit 1; }
-    elif command -v wget &>/dev/null; then
-      wget -q -O "$DIR/$file" "$GITHUB_RAW/$file" \
-        || { echo "ERROR: failed to download $file via wget"; exit 1; }
-    else
-      echo "ERROR: curl or wget required to download app files."
-      exit 1
-    fi
-    echo "  OK $file"
+# ── Version comparison (returns 0 if $1 > $2) ────────────────────────────────
+_ver_gt() {
+  local IFS=. a=($1) b=($2)
+  for i in 0 1 2; do
+    local ai="${a[$i]:-0}" bi="${b[$i]:-0}"
+    (( 10#$ai > 10#$bi )) && return 0
+    (( 10#$ai < 10#$bi )) && return 1
+  done
+  return 1
+}
+
+_download_file() {
+  local file="$1"
+  if command -v curl &>/dev/null; then
+    curl -fsSL "$GITHUB_RAW/$file" -o "$DIR/$file" \
+      || { echo "ERROR: failed to download $file"; exit 1; }
+  elif command -v wget &>/dev/null; then
+    wget -q -O "$DIR/$file" "$GITHUB_RAW/$file" \
+      || { echo "ERROR: failed to download $file"; exit 1; }
+  else
+    echo "ERROR: curl or wget required to download app files."
+    exit 1
   fi
+}
+
+# ── Auto-download or update app files ────────────────────────────────────────
+_app_files_exist=true
+for file in proxy.py course-viewer.html; do
+  [[ ! -f "$DIR/$file" ]] && _app_files_exist=false && break
 done
+
+if ! $_app_files_exist; then
+  # Fresh install — download without asking
+  for file in proxy.py course-viewer.html; do
+    if [[ ! -f "$DIR/$file" ]]; then
+      echo "Downloading $file from GitHub..."
+      _download_file "$file"
+      echo "  OK $file"
+    fi
+  done
+else
+  # Files exist — check for a newer release
+  _local_ver=$(grep -o "APP_VERSION = '[0-9][0-9.]*'" "$DIR/course-viewer.html" 2>/dev/null \
+    | grep -o '[0-9][0-9.]*' | head -1)
+  _latest_ver=$(curl -fsSL --connect-timeout 5 \
+    "https://api.github.com/repos/patchamama/Course-viewer/releases/latest" 2>/dev/null \
+    | grep -o '"tag_name":"v[^"]*"' | grep -o '[0-9][0-9.]*' | head -1)
+
+  if [[ -n "$_latest_ver" && -n "$_local_ver" ]] && _ver_gt "$_latest_ver" "$_local_ver"; then
+    echo ""
+    echo "  New version available: v${_latest_ver}  (installed: v${_local_ver})"
+    read -r -p "  Update now? [y/N] " _choice
+    if [[ "$_choice" =~ ^[Yy]$ ]]; then
+      for file in proxy.py course-viewer.html; do
+        echo "  Updating $file..."
+        _download_file "$file"
+        echo "  OK $file"
+      done
+    fi
+  fi
+fi
 
 # ── Read course config from course.readme.txt ────────────────────────────────
 COURSE_URL=""
