@@ -216,12 +216,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._proxy(CDN_HOST, CDN_PROXY_PATH_PREFIX)
         elif self.path.startswith(PROXY_PATH_PREFIX + '/') or self.path == PROXY_PATH_PREFIX:
             self._proxy(TARGET_HOST, PROXY_PATH_PREFIX)
-        elif self.path == '/list-local-files':
+        elif self.path == '/list-local-files' or self.path.startswith('/list-local-files?'):
             self._list_local_files()
         elif self.path.startswith('/list-directory'):
             self._list_directory()
         elif self.path.startswith('/local-video'):
             self._serve_local_video()
+        elif self.path.startswith('/serve-file'):
+            self._serve_file_absolute()
+        elif self.path == '/api/list-nearby':
+            self._list_nearby()
         else:
             self._static()
 
@@ -231,6 +235,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/save-config':
             self._handle_save_config()
+            return
+        if self.path == '/api/switch-dir':
+            self._handle_switch_dir()
             return
         if self.path.startswith(CDN_PROXY_PATH_PREFIX + '/'):
             self._proxy(CDN_HOST, CDN_PROXY_PATH_PREFIX)
@@ -379,34 +386,131 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if os.path.isdir(filepath):
             filepath = os.path.join(filepath, 'index.html')
+
+        # Always inject _dirId/_dirName/_dirPath into course-viewer.config.json,
+        # synthesising a minimal config on the fly when the file doesn't exist yet.
+        if os.path.basename(filepath) == 'course-viewer.config.json' and \
+           os.path.normpath(os.path.dirname(filepath)) == os.path.normpath(STATIC_DIR):
+            cfg = {}
+            if os.path.isfile(filepath):
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        cfg = json.load(f)
+                except Exception:
+                    cfg = {}
+            cfg['_dirId']   = hashlib.md5(STATIC_DIR.encode()).hexdigest()[:8]
+            cfg['_dirName'] = os.path.basename(STATIC_DIR)
+            cfg['_dirPath'] = STATIC_DIR
+            data = json.dumps(cfg, ensure_ascii=False, indent=2).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            if self.command != 'HEAD':
+                self.wfile.write(data)
+            return
+
         if not os.path.isfile(filepath):
             self.send_error(404, f'Not found: {raw}')
             return
 
         ext = os.path.splitext(filepath)[1].lower()
         mime = MIME_MAP.get(ext, mimetypes.guess_type(filepath)[0] or 'application/octet-stream')
-
-        # Inject _dirId into course-viewer.config.json
-        if os.path.basename(filepath) == 'course-viewer.config.json' and os.path.dirname(filepath) == STATIC_DIR:
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    cfg = json.load(f)
-                cfg['_dirId']   = hashlib.md5(STATIC_DIR.encode()).hexdigest()[:8]
-                cfg['_dirName'] = os.path.basename(STATIC_DIR)
-                data = json.dumps(cfg, ensure_ascii=False, indent=2).encode('utf-8')
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Content-Length', str(len(data)))
-                self.send_header('Cache-Control', 'no-cache')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                if self.command != 'HEAD':
-                    self.wfile.write(data)
-                return
-            except Exception:
-                pass  # fall through to normal file serving
-
         self._send_file(filepath, mime)
+
+    # ─── Serve any local file by absolute path ───────────────────────────────
+    def _serve_file_absolute(self):
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        file_path = urllib.parse.unquote(params.get('path', [''])[0])
+        if not file_path:
+            self.send_error(400, 'Missing path parameter')
+            return
+        file_path = os.path.normpath(file_path)
+        if not os.path.isfile(file_path):
+            self.send_error(404, 'File not found')
+            return
+        ext = os.path.splitext(file_path)[1].lower()
+        mime = MIME_MAP.get(ext, mimetypes.guess_type(file_path)[0] or 'application/octet-stream')
+        self._send_file(file_path, mime)
+
+    # ─── Scan sibling/parent/child dirs for course configs ────────────────────
+    def _list_nearby(self):
+        parent = os.path.dirname(STATIC_DIR)
+        def _entry(path):
+            return {
+                'path': path,
+                'name': os.path.basename(path) or path,
+                'hasConfig': os.path.isfile(os.path.join(path, 'course-viewer.config.json')),
+            }
+        siblings, children = [], []
+        if parent and os.path.isdir(parent) and parent != STATIC_DIR:
+            try:
+                for name in sorted(os.listdir(parent), key=str.lower):
+                    full = os.path.join(parent, name)
+                    if full == STATIC_DIR or not os.path.isdir(full) or name.startswith('.'):
+                        continue
+                    has_cfg = os.path.isfile(os.path.join(full, 'course-viewer.config.json'))
+                    has_launcher = os.path.isfile(os.path.join(full, 'start.bat')) or \
+                                   os.path.isfile(os.path.join(full, 'start.sh'))
+                    if has_cfg or has_launcher:
+                        siblings.append(_entry(full))
+            except PermissionError:
+                pass
+        try:
+            for name in sorted(os.listdir(STATIC_DIR), key=str.lower):
+                full = os.path.join(STATIC_DIR, name)
+                if not os.path.isdir(full) or name.startswith('.') or name.startswith('_'):
+                    continue
+                if os.path.isfile(os.path.join(full, 'course-viewer.config.json')) or \
+                   os.path.isfile(os.path.join(full, 'start.bat')):
+                    children.append(_entry(full))
+        except PermissionError:
+            pass
+        result = {
+            'current': _entry(STATIC_DIR),
+            'parent':  _entry(parent) if parent and parent != STATIC_DIR else None,
+            'siblings': siblings,
+            'children': children,
+        }
+        resp = json.dumps(result, ensure_ascii=False).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(resp)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        if self.command != 'HEAD':
+            self.wfile.write(resp)
+
+    # ─── Switch STATIC_DIR at runtime ─────────────────────────────────────────
+    def _handle_switch_dir(self):
+        global STATIC_DIR
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            data = json.loads(body)
+            new_path = os.path.normpath(data.get('path', ''))
+            if not os.path.isdir(new_path):
+                self.send_error(400, 'Directory not found: ' + new_path)
+                return
+            STATIC_DIR = new_path
+            resp = json.dumps({
+                'ok': True,
+                'dirId':   hashlib.md5(STATIC_DIR.encode()).hexdigest()[:8],
+                'dirName': os.path.basename(STATIC_DIR),
+                'dirPath': STATIC_DIR,
+            }).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(resp)))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(resp)
+        except Exception as e:
+            self.send_error(500, str(e))
 
     # ─── Shared file sender (Range + moov relocation) ─────────────────────────
     def _send_file(self, filepath: str, mime: str):

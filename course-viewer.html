@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Course Viewer</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1d2e'/%3E%3Cpolygon points='11,8 11,24 25,16' fill='%237c8cf8'/%3E%3C/svg%3E">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
@@ -498,8 +499,8 @@
 <header id="app-header">
   <span id="app-title">▶ Course Viewer</span><a id="app-version" href="https://github.com/patchamama/Course-viewer/releases" target="_blank" rel="noopener" style="font-size:9px;color:#3b4fd8;margin-left:5px;align-self:center;text-decoration:none;letter-spacing:.3px;flex-shrink:0" title="View releases">v1.0.0</a>
   <div class="hdr-sep"></div>
-  <select id="dir-selector" title="Switch directory" onchange="Sessions.switchDir(this.value)" size="1"></select>
-  <div class="hdr-sep" id="dir-selector-sep"></div>
+  <select id="dir-selector" title="Switch course directory" onchange="Sessions.switchDir(this.value)" size="1"></select>
+  <div class="hdr-sep" id="dir-selector-sep" style="display:none"></div>
 
   <!-- Layout: horizontal / vertical -->
   <button class="hdr-btn active" id="btn-layout-h" title="Horizontal layout" onclick="Layout.setMode('horizontal')">
@@ -668,6 +669,18 @@
 
       <!-- Course Sessions -->
       <div class="card" style="padding:0">
+        <!-- Nearby Courses browser -->
+        <div class="card" style="padding:0" id="nearby-courses-card" style="display:none">
+          <div class="section-header" onclick="toggleSection('nearby')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
+            <i data-lucide="folder-tree" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+            <span class="section-label" style="margin:0;flex:1">Nearby Courses</span>
+            <i data-lucide="chevron-right" id="nearby-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
+          </div>
+          <div id="nearby-body" style="padding:8px;display:none;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto">
+            <div id="nearby-tree" style="font-size:11px;color:#94a3b8">Loading…</div>
+          </div>
+        </div>
+
         <div class="section-header" onclick="toggleSection('sessions')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
           <i data-lucide="bookmark" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
           <span class="section-label" style="margin:0;flex:1">Sessions</span>
@@ -1228,6 +1241,7 @@ const TabManager = {
     for (const tab of this.tabs) {
       if (tab.type === 'image-viewer') this._createImageViewerFrame(tab);
       else if (tab.type === 'dir-browser') { /* DirBrowser creates its own element */ }
+      else if (tab.type === 'markdown') this._createMarkdownFrame(tab);
       else this._createFrame(tab);
     }
   },
@@ -1306,16 +1320,57 @@ const TabManager = {
   },
 
   openTab(url, title, type = 'custom') {
+    // Auto-detect markdown files
+    if (type === 'custom' && /\.md$/i.test(url.split('?')[0])) type = 'markdown';
     const existing = this.tabs.find(t => t.url === url && t.type === type);
     if (existing) { this.switchTo(existing.id); return; }
     const id = 'tab_' + Date.now();
     const tab = { id, title, url, type, scrollY: 0 };
     this.tabs.push(tab);
-    this._createFrame(tab);
+    if (type === 'markdown') this._createMarkdownFrame(tab);
+    else this._createFrame(tab);
     this.activeId = id;
     this._renderTabBar();
     this._applyActiveTab();
     this._save();
+  },
+
+  _createMarkdownFrame(tab) {
+    const container = document.getElementById('reader-frames-container');
+    if (!container) return null;
+    const div = document.createElement('div');
+    div.id = `reader-frame-${tab.id}`;
+    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;padding:24px 32px;color:#e2e8f0;font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.7';
+    div.innerHTML = '<p style="color:#64748b">Loading…</p>';
+    container.appendChild(div);
+    fetch(tab.url)
+      .then(r => r.ok ? r.text() : Promise.reject(r.status))
+      .then(md => {
+        const html = typeof DOMPurify !== 'undefined'
+          ? DOMPurify.sanitize(marked.parse(md))
+          : marked.parse(md);
+        div.innerHTML = `<style>
+          h1,h2,h3,h4{color:#e2e8f0;margin:1em 0 .4em}
+          h1{font-size:1.6em;border-bottom:1px solid #2d3154;padding-bottom:.3em}
+          h2{font-size:1.3em;border-bottom:1px solid #1e2947;padding-bottom:.2em}
+          p{margin:.6em 0;color:#cbd5e1}
+          a{color:#7c8cf8;text-decoration:underline}
+          code{background:#1e2947;padding:2px 5px;border-radius:4px;font-size:.88em;color:#a5b4fc;font-family:'Fira Code',monospace}
+          pre{background:#151829;border:1px solid #2d3154;border-radius:8px;padding:14px 16px;overflow-x:auto;margin:.8em 0}
+          pre code{background:none;padding:0;color:#e2e8f0}
+          blockquote{border-left:3px solid #3b4fd8;margin:0;padding:.4em 1em;color:#94a3b8;background:#1a1d2e;border-radius:0 6px 6px 0}
+          table{border-collapse:collapse;width:100%;margin:.8em 0}
+          th,td{border:1px solid #2d3154;padding:6px 12px;text-align:left}
+          th{background:#1e2947;color:#a5b4fc}
+          tr:nth-child(even){background:#151829}
+          ul,ol{padding-left:1.5em;margin:.5em 0}
+          li{color:#cbd5e1;margin:.2em 0}
+          hr{border:none;border-top:1px solid #2d3154;margin:1.5em 0}
+          img{max-width:100%;border-radius:6px}
+        </style>${html}`;
+      })
+      .catch(err => { div.innerHTML = `<p style="color:#f87171">Failed to load: ${err}</p>`; });
+    return div;
   },
 
   openFromInput() {
@@ -2740,31 +2795,19 @@ const Sessions = {
   },
 
   renderDirSelector() {
-    const el  = document.getElementById('dir-selector');
-    const sep = document.getElementById('dir-selector-sep');
+    const el = document.getElementById('dir-selector');
     if (!el) return;
-
     const auto      = this._all().filter(s => s.auto);
-    const currentId = appConfig?._dirId   ? `auto_${appConfig._dirId}`   : null;
+    const currentId = appConfig?._dirId ? `auto_${appConfig._dirId}` : null;
     const dirName   = appConfig?._dirName || appConfig?._dirId || null;
-
-    // Build entries: auto-sessions from localStorage + current dir if not yet saved
-    const entries = [...auto];
+    const entries   = [...auto];
     if (currentId && dirName && !entries.find(s => s.id === currentId)) {
       entries.unshift({ id: currentId, name: `📁 ${dirName}` });
     }
-
-    if (entries.length === 0) {
-      el.classList.remove('visible');
-      if (sep) sep.classList.remove('visible');
-      return;
-    }
-
+    if (!entries.length) return;
     el.innerHTML = entries.map(s =>
       `<option value="${s.id}"${s.id === currentId ? ' selected' : ''}>${s.name}</option>`
     ).join('');
-    el.classList.add('visible');
-    if (sep) sep.classList.add('visible');
   },
 
   openSave() {
@@ -2836,8 +2879,21 @@ const Sessions = {
     this.loadById(id);
   },
 
-  switchDir(id) {
+  async switchDir(id) {
     if (!id) return;
+    const session = this._all().find(s => s.id === id);
+    if (!session) return;
+    // If backend is running and we know the target path, switch proxy STATIC_DIR
+    if (window._hasBackend && session._dirPath) {
+      try {
+        const r = await fetch('/api/switch-dir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: session._dirPath })
+        });
+        if (r.ok) { location.reload(); return; }
+      } catch { /* fallback to session load */ }
+    }
     const sidebarSel = document.getElementById('sessions-list');
     if (sidebarSel) sidebarSel.value = id;
     this.loadById(id);
@@ -2854,6 +2910,7 @@ const Sessions = {
       auto: true,
       _dirId: dirId,
       _dirName: dirName,
+      _dirPath: appConfig?._dirPath || '',
       savedAt: new Date().toISOString(),
       courseUrl: appConfig?.courseUrl || '',
       coursePassword: appConfig?.coursePassword || '',
@@ -2983,6 +3040,50 @@ const DirectoryPicker = {
 // ────────────────────────────────────────────────────────────
 // DIRECTORY BROWSER
 // ────────────────────────────────────────────────────────────
+const NearbyBrowser = {
+  async load() {
+    const card = document.getElementById('nearby-courses-card');
+    const tree = document.getElementById('nearby-tree');
+    if (!tree) return;
+    try {
+      const r = await fetch('/api/list-nearby', { cache: 'no-store' });
+      if (!r.ok) return;
+      const data = await r.json();
+      const all = [
+        ...(data.parent && (data.parent.hasConfig) ? [{ ...data.parent, _level: 0, _rel: '↑ parent' }] : []),
+        ...data.siblings.map(s => ({ ...s, _level: 0, _rel: '↕ sibling' })),
+        ...data.children.map(c => ({ ...c, _level: 1, _rel: '↳ child' })),
+      ];
+      if (!all.length) { if (card) card.style.display = 'none'; return; }
+      if (card) card.style.display = '';
+      tree.innerHTML = all.map(e => {
+        const indent = e._level ? 'padding-left:14px' : '';
+        const cfg = e.hasConfig ? '' : ' style="opacity:.55"';
+        return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-radius:4px;${indent}">
+          <span${cfg} style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.path}">
+            ${e._level ? '📂' : '📁'} ${e.name}
+          </span>
+          <button onclick="NearbyBrowser.switchTo(${JSON.stringify(e.path)})"
+            style="flex-shrink:0;font-size:10px;padding:1px 6px;background:#3b4fd8;color:#fff;border:none;border-radius:4px;cursor:pointer"
+            title="Switch to this course">Open</button>
+        </div>`;
+      }).join('');
+    } catch { /* no backend */ }
+  },
+
+  async switchTo(path) {
+    try {
+      const r = await fetch('/api/switch-dir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path })
+      });
+      if (r.ok) { location.reload(); return; }
+    } catch {}
+    toast('Could not switch directory');
+  }
+};
+
 const DirBrowser = {
   _tabId: 'dir-browser',
   _currentPath: '',
@@ -3282,9 +3383,28 @@ async function init() {
   if (_hasBackend && appConfig._dirId) {
     Sessions.autoSave(appConfig._dirId, appConfig._dirName || appConfig._dirId);
   }
-  // Always render the dir selector immediately — even before Sessions.render()
-  // so the current directory name appears in the header on every load
+  // Render dir selector; when backend is running force display via inline style
+  // (bypasses any CSS specificity issue)
   Sessions.renderDirSelector();
+  if (_hasBackend) {
+    const _ds = document.getElementById('dir-selector');
+    const _dsep = document.getElementById('dir-selector-sep');
+    if (_ds) {
+      _ds.style.setProperty('display', 'inline-block', 'important');
+      _ds.style.setProperty('background', '#0f1117', 'important');
+      _ds.style.setProperty('color', '#a5b4fc', 'important');
+      _ds.style.setProperty('border', '1px solid #3b4fd8', 'important');
+      _ds.style.setProperty('border-radius', '6px', 'important');
+      _ds.style.setProperty('padding', '2px 8px', 'important');
+      _ds.style.setProperty('font-size', '11px', 'important');
+      _ds.style.setProperty('max-width', '220px', 'important');
+      _ds.style.setProperty('cursor', 'pointer', 'important');
+      _ds.style.setProperty('outline', 'none', 'important');
+      _ds.style.setProperty('height', '26px', 'important');
+      _ds.style.setProperty('flex-shrink', '0', 'important');
+    }
+    if (_dsep) _dsep.style.setProperty('display', 'block', 'important');
+  }
   Sessions.render();
   initSection('sessions', false);
 
@@ -3298,6 +3418,12 @@ async function init() {
     if (!hasDemo && demoTabs.length > 0) {
       for (const t of demoTabs) TabManager.openTab(t.url, t.title, t.type);
     }
+  }
+
+  // Load nearby courses browser (only when backend running)
+  if (_hasBackend) {
+    initSection('nearby', false);
+    NearbyBrowser.load();
   }
 
   // Auto-open local files when no course URL (and no saved custom tabs from localStorage)
