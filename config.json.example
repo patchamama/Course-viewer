@@ -1,0 +1,20 @@
+{
+  "courseUrl": "https://share.articulate.com/YOUR_COURSE_ID#/lessons/YOUR_LESSON_ID",
+  "coursePassword": "YourCoursePassword",
+  "videos": [
+    {
+      "id": "yt_XXXXXXXXXXX",
+      "title": "Module 1 - Introduction [XXXXXXXXXXX]",
+      "youtubeId": "XXXXXXXXXXX",
+      "localFile": "module1_intro_[XXXXXXXXXXX].mp4",
+      "subtitleFile": "module1_intro_[XXXXXXXXXXX].srt"
+    },
+    {
+      "id": "yt_YYYYYYYYYYY",
+      "title": "Module 2 - Deep Dive [YYYYYYYYYYY]",
+      "youtubeId": "YYYYYYYYYYY",
+      "localFile": "module2_deep_[YYYYYYYYYYY].mp4",
+      "subtitleFile": "module2_deep_[YYYYYYYYYYY].srt"
+    }
+  ]
+}

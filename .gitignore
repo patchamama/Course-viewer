@@ -1,0 +1,39 @@
+# Course-specific files (not part of the app)
+config.json
+course.readme.txt
+
+# Video and subtitle files
+*.mp4
+*.m4v
+*.mov
+*.mkv
+*.avi
+*.webm
+*.ogg
+*.srt
+*.vtt
+
+# Images and documents (course content)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.svg
+*.pdf
+*.epub
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*~

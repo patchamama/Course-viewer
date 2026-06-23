@@ -1,0 +1,2726 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course Viewer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  :root {
+    --panel-a: 50%;
+    --resizer-size: 6px;
+  }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    background: #0f1117;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    zoom: 0.8;
+    height: 125%;
+  }
+  html.light body { background: #f1f5f9; color: #1e293b; }
+
+  /* ── Header ── */
+  #app-header {
+    flex: none;
+    height: 52px;
+    background: #1a1d2e;
+    border-bottom: 1px solid #2d3154;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    z-index: 100;
+  }
+  html.light #app-header { background: #1e293b; border-color: #334155; }
+
+  .hdr-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 8px; border: none;
+    background: transparent; color: #94a3b8; cursor: pointer; transition: all .15s;
+    flex-shrink: 0;
+  }
+  .hdr-btn:hover { background: #2d3154; color: #e2e8f0; }
+  .hdr-btn.active { background: #3b4fd8; color: #fff; }
+  html.light .hdr-btn:hover { background: #334155; }
+  html.light .hdr-btn.active { background: #3b82f6; }
+
+  .hdr-sep { width: 1px; height: 24px; background: #2d3154; margin: 0 4px; flex-shrink: 0; }
+
+  #app-title {
+    font-weight: 700; font-size: 15px; color: #7c8cf8; letter-spacing: -.3px;
+    margin-right: 6px; white-space: nowrap;
+  }
+
+  /* ── Main layout ── */
+  #main-layout {
+    flex: 1 1 0;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+  }
+  #main-layout.vertical { flex-direction: column; }
+
+  /* ── Panels ── */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+    flex: 0 0 auto; /* JS controls exact size via inline width/height */
+    position: relative;
+  }
+
+  .panel-header {
+    flex: none;
+    height: 38px;
+    background: #151829;
+    border-bottom: 1px solid #2d3154;
+    display: flex; align-items: center; gap: 6px; padding: 0 10px;
+    font-size: 12px; font-weight: 600; color: #7c8cf8; text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  html.light .panel-header { background: #e2e8f0; border-color: #cbd5e1; color: #3b82f6; }
+
+  .panel-body {
+    flex: 1 1 0;
+    min-height: 0; /* required for flex child to scroll instead of expand */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* ── Resizer ── */
+  #resizer {
+    flex: none;
+    background: #2d3154;
+    transition: background .15s;
+    position: relative;
+    z-index: 10;
+  }
+  #resizer:hover, #resizer.dragging { background: #3b4fd8; }
+  #main-layout:not(.vertical) #resizer { width: var(--resizer-size); cursor: col-resize; }
+  #main-layout.vertical #resizer { height: var(--resizer-size); cursor: row-resize; }
+
+  /* ── Video area ── */
+  #video-wrapper {
+    position: relative;
+    width: 100%;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  #video-wrapper iframe, #video-wrapper video {
+    width: 100%; height: 100%; display: block;
+    border: none; background: #000; position: absolute; inset: 0;
+  }
+  #subtitle-overlay {
+    position: absolute;
+    bottom: 8px; left: 50%; transform: translateX(-50%);
+    max-width: 90%;
+    background: rgba(0,0,0,.75);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    text-align: center;
+    pointer-events: none;
+    white-space: pre-wrap;
+    z-index: 10;
+  }
+
+  /* ── Panel B mode buttons ── */
+  .pnl-mode-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 6px; border: none;
+    background: transparent; color: #64748b; cursor: pointer; transition: all .15s; flex-shrink: 0;
+  }
+  .pnl-mode-btn.active { background: #3b4fd8; color: #fff; }
+  .pnl-mode-btn:hover:not(.active) { background: #2d3154; color: #e2e8f0; }
+  html.light .pnl-mode-btn.active { background: #3b82f6; }
+  html.light .pnl-mode-btn:hover:not(.active) { background: #e2e8f0; }
+
+  /* ── Panel B notes area ── */
+  #panelb-notes-wrap {
+    flex: 1 1 0; min-height: 0; flex-direction: column; gap: 6px; padding: 8px; display: none;
+  }
+  #panelb-notes-editor {
+    flex: 1 1 0; min-height: 0; border: 1px solid #2d3154; background: #0f1117;
+    color: #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px;
+    font-family: 'Fira Code','Cascadia Code',monospace; resize: none; outline: none; line-height: 1.6;
+  }
+  html.light #panelb-notes-editor { background: #fff; color: #1e293b; border-color: #e2e8f0; }
+  #panelb-notes-preview {
+    flex: 1 1 0; min-height: 0; overflow-y: auto; border: 1px solid #2d3154; background: #0f1117;
+    color: #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px; display: none; line-height: 1.6;
+  }
+  html.light #panelb-notes-preview { background: #fff; color: #1e293b; border-color: #e2e8f0; }
+  #panelb-notes-preview a { color: #7c8cf8; text-decoration: underline; }
+  #panelb-notes-preview h1,h2,h3 { font-weight:700; margin:.6em 0 .3em; }
+  #panelb-notes-preview h1 { font-size:1.4em; }
+  #panelb-notes-preview h2 { font-size:1.2em; }
+  #panelb-notes-preview code { background:#1e2947; padding:1px 5px; border-radius:3px; font-size:.9em; }
+  #panelb-notes-preview pre { background:#1e2947; padding:10px; border-radius:6px; overflow-x:auto; }
+  html.light #panelb-notes-preview code { background:#e2e8f0; }
+
+  /* ── Subtitle settings row ── */
+  #sub-settings { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px; padding-top:6px; border-top:1px solid #2d3154; }
+  html.light #sub-settings { border-color:#e2e8f0; }
+  .sub-setting-label { font-size:11px; color:#64748b; flex-shrink:0; }
+
+  /* ── Reading panel ── */
+  #course-frame {
+    flex: 1 1 0;
+    border: none;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+  }
+  #reading-panel-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    gap: 0;
+  }
+  #pw-bar {
+    flex: none;
+    background: #1e2947;
+    border-bottom: 1px solid #2d3154;
+    padding: 4px 10px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: #94a3b8;
+  }
+  html.light #pw-bar { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+  #pw-bar code { background: #0f1117; padding: 1px 6px; border-radius: 4px; color: #7c8cf8; }
+  html.light #pw-bar code { background: #1e3a8a; color: #bfdbfe; }
+
+  #course-frame-wrap {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    gap: 8px;
+    min-height: 0;
+    overflow: auto;
+  }
+  #reader-frames-container {
+    flex: 1 1 0;
+    min-height: 0;
+    position: relative;
+    overflow: auto;
+  }
+  .reader-frame-slot {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 8px;
+  }
+  #reader-tab-bar {
+    flex: none;
+    background: #151829;
+    border-bottom: 1px solid #2d3154;
+    display: flex;
+    align-items: stretch;
+    min-height: 30px;
+    overflow: hidden;
+  }
+  #reader-tabs-list {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  #reader-tabs-list::-webkit-scrollbar { display: none; }
+  .reader-tab {
+    display: flex; align-items: center; gap: 5px;
+    padding: 0 8px 0 10px; cursor: pointer;
+    border-right: 1px solid #2d3154;
+    font-size: 11px; color: #94a3b8;
+    white-space: nowrap; user-select: none;
+    min-width: 70px; max-width: 150px;
+  }
+  .reader-tab.active { background: #1e2947; color: #e2e8f0; }
+  .reader-tab:hover:not(.active) { background: #1a1d2e; color: #cbd5e1; }
+  .reader-tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .reader-tab-close {
+    color: #475569; background: none; border: none; cursor: pointer;
+    padding: 0; line-height: 1; font-size: 14px; flex-shrink: 0;
+  }
+  .reader-tab-close:hover { color: #f87171; }
+  #reader-tab-input-area {
+    display: flex; align-items: center; gap: 3px;
+    padding: 0 6px; flex-shrink: 0;
+    border-left: 1px solid #2d3154;
+  }
+
+  /* ── Notes panel ── */
+  #notes-panel {
+    flex: none;
+    background: #151829;
+    border-top: 1px solid #2d3154;
+    display: flex;
+    flex-direction: column;
+    transition: height .25s ease;
+    overflow: hidden;
+    z-index: 50;
+  }
+  html.light #notes-panel { background: #f8fafc; border-color: #e2e8f0; }
+  #notes-panel.collapsed { height: 40px; }
+  #notes-panel.normal { height: 38vh; }
+  #notes-panel.fullscreen { height: 55vh; }
+
+  #notes-bar {
+    flex: none;
+    height: 40px;
+    background: #1a1d2e;
+    border-bottom: 1px solid #2d3154;
+    display: flex; align-items: center; gap: 6px; padding: 0 10px;
+    cursor: pointer; flex-shrink: 0;
+  }
+  html.light #notes-bar { background: #e2e8f0; border-color: #cbd5e1; }
+  #notes-bar:hover { background: #22264a; }
+  html.light #notes-bar:hover { background: #cbd5e1; }
+
+  #notes-title { font-size: 12px; font-weight: 700; color: #7c8cf8; text-transform: uppercase; letter-spacing: .5px; flex: 1; }
+  #notes-content { flex: 1 1 0; display: flex; flex-direction: column; overflow: hidden; padding: 8px; gap: 6px; }
+  #notes-tabs { display: flex; gap: 4px; flex-shrink: 0; }
+  .notes-tab {
+    padding: 4px 12px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600;
+    cursor: pointer; background: transparent; color: #64748b;
+  }
+  .notes-tab.active { background: #3b4fd8; color: #fff; }
+  html.light .notes-tab { color: #94a3b8; }
+  html.light .notes-tab.active { background: #3b82f6; color: #fff; }
+
+  #notes-editor {
+    flex: 1 1 0; border: 1px solid #2d3154; background: #0f1117;
+    color: #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px;
+    font-family: 'Fira Code', 'Cascadia Code', monospace; resize: none; outline: none;
+    line-height: 1.6;
+  }
+  html.light #notes-editor { background: #fff; color: #1e293b; border-color: #e2e8f0; }
+  #notes-preview {
+    flex: 1 1 0; overflow-y: auto; border: 1px solid #2d3154; background: #0f1117;
+    color: #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px;
+    display: none; line-height: 1.6;
+  }
+  html.light #notes-preview { background: #fff; color: #1e293b; border-color: #e2e8f0; }
+  #notes-preview a { color: #7c8cf8; text-decoration: underline; }
+  #notes-preview input[type=checkbox] { margin-right: 6px; cursor: pointer; }
+  #notes-preview h1,h2,h3 { font-weight: 700; margin: .6em 0 .3em; }
+  #notes-preview h1 { font-size: 1.4em; }
+  #notes-preview h2 { font-size: 1.2em; }
+  #notes-preview h3 { font-size: 1.05em; }
+  #notes-preview code { background: #1e2947; padding: 1px 5px; border-radius: 3px; font-size: .9em; }
+  #notes-preview pre { background: #1e2947; padding: 10px; border-radius: 6px; overflow-x: auto; }
+  #notes-preview ul,ol { padding-left: 1.5em; }
+  #notes-preview li { margin: 2px 0; }
+  #notes-preview table { border-collapse: collapse; width: 100%; }
+  #notes-preview td,th { border: 1px solid #2d3154; padding: 4px 8px; }
+  html.light #notes-preview code { background: #e2e8f0; }
+  html.light #notes-preview pre { background: #f1f5f9; }
+  html.light #notes-preview td,html.light #notes-preview th { border-color: #e2e8f0; }
+
+  /* ── Video resize handle ── */
+  #video-resize-handle {
+    height: 8px; background: #1a1d2e; cursor: row-resize;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .12s; flex-shrink: 0; border-radius: 0 0 8px 8px;
+  }
+  #video-resize-handle:hover, #video-resize-handle.dragging { background: #3b4fd8; }
+  #video-resize-handle::after {
+    content: ''; width: 28px; height: 2px;
+    background: #4a5568; border-radius: 2px; pointer-events: none;
+  }
+  html.light #video-resize-handle { background: #e2e8f0; }
+  html.light #video-resize-handle:hover { background: #3b82f6; }
+
+  /* ── Proxy error panel ── */
+  #proxy-error { display:flex;flex-direction:column;align-items:center;justify-content:center;
+    height:100%;gap:12px;color:#94a3b8;text-align:center;padding:24px; }
+
+  /* ── Collapsible section headers ── */
+  .section-header { transition: background .12s; }
+  .section-header:hover { background: rgba(59,79,216,.12); }
+  html.light .section-header:hover { background: rgba(59,130,246,.1); }
+
+  /* ── Generic UI ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border-radius: 7px; border: none; cursor: pointer;
+    font-size: 12px; font-weight: 600; transition: all .15s;
+  }
+  .btn-primary { background: #3b4fd8; color: #fff; }
+  .btn-primary:hover { background: #4f63e8; }
+  .btn-ghost {
+    background: transparent; color: #94a3b8; border: 1px solid #2d3154;
+  }
+  .btn-ghost:hover { background: #22264a; color: #e2e8f0; }
+  html.light .btn-ghost { border-color: #cbd5e1; color: #64748b; }
+  html.light .btn-ghost:hover { background: #e2e8f0; color: #1e293b; }
+  .btn-danger { background: #7f1d1d; color: #fca5a5; }
+  .btn-danger:hover { background: #991b1b; }
+
+  select, input[type=text], input[type=url] {
+    background: #1e2947; border: 1px solid #2d3154; color: #e2e8f0;
+    border-radius: 7px; padding: 5px 9px; font-size: 12px; outline: none;
+    width: 100%;
+  }
+  select:focus, input[type=text]:focus, input[type=url]:focus { border-color: #3b4fd8; }
+  html.light select, html.light input[type=text], html.light input[type=url] {
+    background: #fff; border-color: #e2e8f0; color: #1e293b;
+  }
+
+  .card {
+    background: #1a1d2e; border: 1px solid #2d3154; border-radius: 10px; padding: 10px;
+  }
+  html.light .card { background: #fff; border-color: #e2e8f0; }
+
+  .section-label {
+    font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;
+    letter-spacing: .5px; margin-bottom: 5px;
+  }
+
+  /* ── Subtitle search results ── */
+  #sub-results {
+    max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;
+  }
+  .sub-result-item {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 5px 8px; border-radius: 6px; cursor: pointer;
+    background: #1e2947; font-size: 12px; border: 1px solid transparent;
+    transition: all .12s;
+  }
+  .sub-result-item:hover { border-color: #3b4fd8; background: #22264a; }
+  .sub-result-item .ts { color: #7c8cf8; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .sub-result-item .vid-badge {
+    background: #2d3154; padding: 1px 5px; border-radius: 4px; color: #94a3b8;
+    font-size: 10px; flex-shrink: 0;
+  }
+  .sub-result-item mark { background: #3b4fd8; color: #fff; border-radius: 2px; padding: 0 2px; }
+  html.light .sub-result-item { background: #eff6ff; }
+  html.light .sub-result-item:hover { background: #dbeafe; border-color: #93c5fd; }
+  html.light .sub-result-item .ts { color: #3b82f6; }
+  html.light .sub-result-item .vid-badge { background: #dbeafe; color: #3b82f6; }
+  html.light .sub-result-item mark { background: #3b82f6; }
+
+  /* ── Markers ── */
+  .marker-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px; border-radius: 6px; background: #1e2947;
+    font-size: 12px; cursor: pointer; border: 1px solid transparent;
+  }
+  .marker-item:hover { border-color: #3b4fd8; }
+  .marker-item .ts { color: #7c8cf8; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .marker-item .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .marker-item .del-btn { flex-shrink: 0; color: #64748b; cursor: pointer; }
+  .marker-item .del-btn:hover { color: #f87171; }
+  html.light .marker-item { background: #eff6ff; }
+  html.light .marker-item:hover { border-color: #93c5fd; }
+  html.light .marker-item .ts { color: #3b82f6; }
+
+  /* ── File list ── */
+  .file-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 8px; cursor: pointer;
+    background: #1e2947; border: 1px solid transparent; transition: all .12s;
+    font-size: 12px;
+  }
+  .file-item:hover { border-color: #3b4fd8; background: #22264a; }
+  .file-item.active { border-color: #3b4fd8; background: #1e2f6e; }
+  html.light .file-item { background: #eff6ff; }
+  html.light .file-item:hover { border-color: #93c5fd; background: #dbeafe; }
+  html.light .file-item.active { border-color: #3b82f6; background: #bfdbfe; }
+
+  /* ── Tooltip ── */
+  [title] { position: relative; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d3154; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3b4fd8; }
+
+  /* ── Sync marker badge ── */
+  .sync-badge { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .sync-badge .part { display: flex; align-items: center; gap: 4px; background: #1e2947; padding: 3px 7px; border-radius: 5px; font-size: 11px; }
+  html.light .sync-badge .part { background: #dbeafe; }
+
+  /* ── Loading spinner ── */
+  .spinner { width: 16px; height: 16px; border: 2px solid #2d3154; border-top-color: #3b4fd8; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 60px; right: 16px;
+    background: #3b4fd8; color: #fff; padding: 8px 16px;
+    border-radius: 8px; font-size: 13px; font-weight: 600;
+    opacity: 0; transition: opacity .25s; z-index: 999; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+
+  /* Input row */
+  .input-row { display: flex; gap: 6px; align-items: center; }
+  .input-row input, .input-row select { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header id="app-header">
+  <span id="app-title">▶ Course Viewer</span>
+  <div class="hdr-sep"></div>
+
+  <!-- Layout: horizontal / vertical -->
+  <button class="hdr-btn active" id="btn-layout-h" title="Horizontal layout" onclick="Layout.setMode('horizontal')">
+    <i data-lucide="columns-2" size="16"></i>
+  </button>
+  <button class="hdr-btn" id="btn-layout-v" title="Vertical layout" onclick="Layout.setMode('vertical')">
+    <i data-lucide="rows-2" size="16"></i>
+  </button>
+
+  <div class="hdr-sep"></div>
+
+  <!-- Swap panels -->
+  <button class="hdr-btn" title="Swap panels" onclick="Layout.swap()">
+    <i data-lucide="arrow-left-right" size="16"></i>
+  </button>
+
+  <!-- Sync bookmark -->
+  <button class="hdr-btn" title="Sync bookmark (video + reading position)" onclick="Markers.addSync()">
+    <i data-lucide="link-2" size="16"></i>
+  </button>
+
+  <div class="hdr-sep"></div>
+
+  <!-- Notes toggle -->
+  <button class="hdr-btn" id="btn-notes-toggle" title="Toggle notes panel" onclick="Notes.cycleSize()">
+    <i data-lucide="notebook-pen" size="16"></i>
+  </button>
+
+  <!-- Export all -->
+  <button class="hdr-btn" title="Export all data (markers + notes)" onclick="IO.exportAll()">
+    <i data-lucide="download" size="16"></i>
+  </button>
+  <button class="hdr-btn" title="Import data" onclick="IO.importAll()">
+    <i data-lucide="upload" size="16"></i>
+  </button>
+
+  <div style="flex:1"></div>
+
+  <!-- Fullscreen -->
+  <button class="hdr-btn" id="btn-fullscreen" title="Toggle fullscreen" onclick="toggleFullscreen()">
+    <i data-lucide="maximize" size="16"></i>
+  </button>
+
+  <!-- Theme -->
+  <button class="hdr-btn" id="btn-theme" title="Toggle dark/light mode" onclick="Theme.toggle()">
+    <i data-lucide="sun" size="16"></i>
+  </button>
+</header>
+
+<!-- ═══════════════════ MAIN ═══════════════════ -->
+<div id="main-layout">
+
+  <!-- ─── PANEL A (video by default) ─── -->
+  <div class="panel" id="panel-a">
+    <div id="panel-a-restore" style="display:none;position:absolute;inset:0;z-index:10;cursor:pointer;flex-direction:column;align-items:center;justify-content:center;background:#151829;border-right:1px solid #2d3154" onclick="PanelA.toggleMinimize()" title="Restore panel">
+      <i data-lucide="chevron-right" size="18" style="color:#7c8cf8"></i>
+    </div>
+    <div class="panel-header">
+      <i data-lucide="play-circle" size="14"></i>
+      <span id="panel-a-label">Video</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Video.openYouTubePrompt()">
+        <i data-lucide="tv-2" size="12"></i> YouTube URL
+      </button>
+      <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Video.openLocalModal()" title="Open local video file">
+        <i data-lucide="folder-open" size="12"></i> Local
+      </button>
+      <button class="hdr-btn" id="btn-panela-minimize" style="width:26px;height:26px;flex-shrink:0" title="Minimize / restore panel" onclick="PanelA.toggleMinimize()">
+        <i data-lucide="panel-left-close" size="13"></i>
+      </button>
+    </div>
+    <div class="panel-body" id="panel-a-body">
+
+      <!-- Video player -->
+      <div class="card" style="padding:0;overflow:visible;flex-shrink:0">
+        <div id="video-wrapper" style="height:240px;position:relative;background:#000;border-radius:8px 8px 0 0;overflow:hidden">
+          <div id="video-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#0a0c1a;color:#2d3154;flex-direction:column;gap:10px">
+            <i data-lucide="play-circle" size="48" style="opacity:.3"></i>
+            <span style="font-size:12px;opacity:.5">Select a video below</span>
+          </div>
+          <div id="subtitle-overlay" style="display:none"></div>
+        </div>
+        <div id="video-resize-handle" title="Drag to resize video height"></div>
+      </div>
+
+      <!-- Subtitle controls -->
+      <div class="card" style="padding:0">
+        <div class="section-header" onclick="toggleSection('subtitles')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid transparent">
+          <i data-lucide="captions" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+          <span class="section-label" style="margin:0;flex:1">Subtitles</span>
+          <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();Sub.toggle()" id="btn-sub-toggle">
+            <i data-lucide="captions" size="11"></i> ON
+          </button>
+          <div class="spinner" id="sub-load-spinner" style="display:none;margin-right:4px"></div>
+          <i data-lucide="chevron-right" id="subtitles-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
+        </div>
+        <div id="subtitles-body" style="padding:8px;display:none;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <select id="sub-lang-select" style="display:none;font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid #2d3154;background:#1e2947;color:#e2e8f0;cursor:pointer" onchange="Sub.setLang(this.value)" title="Playback language"></select>
+            <div style="flex:1;min-width:120px;display:flex;gap:4px;align-items:center">
+              <div class="input-row" style="flex:1">
+                <input type="text" id="sub-search-input" placeholder="Search subtitles…" oninput="Sub.search(this.value)" onkeydown="if(event.key==='Enter')Sub._doSearch(this.value)" style="font-size:12px">
+              </div>
+              <button onclick="Sub._doSearch(document.getElementById('sub-search-input').value)" class="btn btn-ghost" style="padding:4px 7px;flex-shrink:0" title="Search subtitles">
+                <i data-lucide="search" size="13"></i>
+              </button>
+            </div>
+          </div>
+          <div id="sub-results"></div>
+          <div id="sub-settings">
+            <span class="sub-setting-label">Size:</span>
+            <input type="range" id="sub-size" min="10" max="50" value="14" style="width:60px;accent-color:#3b4fd8" oninput="Sub.applyStyle()">
+            <span id="sub-size-val" style="font-size:11px;color:#94a3b8;min-width:20px">14px</span>
+            <span class="sub-setting-label">BG:</span>
+            <input type="color" id="sub-bg-color" value="#000000" style="width:26px;height:20px;border:none;padding:0;background:transparent;cursor:pointer" oninput="Sub.applyStyle()">
+            <input type="range" id="sub-bg-opacity" min="0" max="100" value="75" style="width:52px;accent-color:#3b4fd8" title="Background opacity" oninput="Sub.applyStyle()">
+            <span class="sub-setting-label">Text:</span>
+            <input type="color" id="sub-text-color" value="#ffffff" style="width:26px;height:20px;border:none;padding:0;background:transparent;cursor:pointer" oninput="Sub.applyStyle()">
+            <span class="sub-setting-label" style="margin-left:4px">Pos:</span>
+            <button class="btn btn-ghost" style="padding:1px 5px;font-size:13px;line-height:1" onclick="Sub.movePos(0,10)" title="Move up">↑</button>
+            <button class="btn btn-ghost" style="padding:1px 5px;font-size:13px;line-height:1" onclick="Sub.movePos(0,-10)" title="Move down">↓</button>
+            <button class="btn btn-ghost" style="padding:1px 5px;font-size:13px;line-height:1" onclick="Sub.movePos(-20,0)" title="Move left">←</button>
+            <button class="btn btn-ghost" style="padding:1px 5px;font-size:13px;line-height:1" onclick="Sub.movePos(20,0)" title="Move right">→</button>
+            <button class="btn btn-ghost" style="padding:1px 5px;font-size:11px" onclick="Sub.resetPos()" title="Reset position">⌂</button>
+            <span class="sub-setting-label" style="margin-left:6px">Mode:</span>
+            <select id="sub-mode-select" onchange="Sub.setMode(this.value)" style="font-size:10px;padding:2px 4px;border-radius:4px;border:1px solid #2d3154;background:#1e2947;color:#e2e8f0;height:22px">
+              <option value="multiline">Multiline</option>
+              <option value="online">Online</option>
+              <option value="online-join">Online Join</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- File list -->
+      <div class="card" style="padding:0">
+        <div class="section-header" onclick="toggleSection('files')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
+          <i data-lucide="folder-open" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+          <span class="section-label" style="margin:0;flex:1">Course Videos</span>
+          <button class="btn btn-ghost" style="padding:2px 6px" onclick="event.stopPropagation();ExternalVideos.openAdd()" title="Add external video">
+            <i data-lucide="plus" size="12"></i>
+          </button>
+          <i data-lucide="chevron-right" id="files-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
+        </div>
+        <div id="files-body" style="padding:8px;display:none;flex-direction:column;gap:4px">
+          <div id="file-list" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+      </div>
+
+      <!-- Video markers -->
+      <div class="card" style="padding:0">
+        <div class="section-header" onclick="toggleSection('vmarkers')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid transparent">
+          <i data-lucide="bookmark" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+          <span class="section-label" style="margin:0;flex:1">Video Markers</span>
+          <button class="btn btn-primary" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();Markers.addVideo()">
+            <i data-lucide="bookmark-plus" size="11"></i> Mark
+          </button>
+          <button class="btn btn-ghost" style="padding:2px 7px" onclick="event.stopPropagation();Markers.exportVideo()" title="Export markers">
+            <i data-lucide="download" size="11"></i>
+          </button>
+          <label class="btn btn-ghost" style="padding:2px 7px;cursor:pointer" title="Import markers">
+            <i data-lucide="upload" size="11"></i>
+            <input type="file" accept=".json" style="display:none" onchange="Markers.importVideo(this)">
+          </label>
+          <i data-lucide="chevron-right" id="vmarkers-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
+        </div>
+        <div id="vmarkers-body" style="padding:8px;display:none">
+          <div id="video-markers-list" style="display:flex;flex-direction:column;gap:3px"></div>
+        </div>
+      </div>
+
+      <!-- Sync markers -->
+      <div class="card" style="padding:0">
+        <div class="section-header" onclick="toggleSection('sync')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid transparent">
+          <i data-lucide="link-2" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+          <span class="section-label" style="margin:0;flex:1">Sync Bookmarks</span>
+          <button class="btn btn-ghost" style="padding:2px 7px" onclick="event.stopPropagation();Markers.exportSync()" title="Export sync bookmarks">
+            <i data-lucide="download" size="11"></i>
+          </button>
+          <i data-lucide="chevron-right" id="sync-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
+        </div>
+        <div id="sync-body" style="padding:8px;display:none">
+          <div id="sync-markers-list" style="display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── RESIZER ─── -->
+  <div id="resizer"></div>
+
+  <!-- ─── PANEL B (reading by default) ─── -->
+  <div class="panel" id="panel-b">
+    <div id="panel-b-restore" style="display:none;position:absolute;inset:0;z-index:10;cursor:pointer;flex-direction:column;align-items:center;justify-content:center;background:#151829;border-left:1px solid #2d3154" onclick="PanelB.toggleMinimize()" title="Restore panel">
+      <i data-lucide="chevron-left" size="18" style="color:#7c8cf8"></i>
+    </div>
+    <div class="panel-header">
+      <i data-lucide="book-open" size="14" id="panel-b-icon"></i>
+      <span id="panel-b-label">Course Reader</span>
+      <a id="course-url-link" href="#" target="_blank" rel="noopener"
+         style="display:none;align-items:center;gap:2px;color:#7c8cf8;font-size:10px;text-decoration:none;margin-left:6px;flex-shrink:0;overflow:hidden;max-width:90px;white-space:nowrap;text-overflow:ellipsis"
+         title="Open course in new tab">
+        <i data-lucide="external-link" size="10" style="flex-shrink:0"></i>
+        <span id="course-url-text"></span>
+      </a>
+      <div style="flex:1"></div>
+      <button class="hdr-btn" style="width:26px;height:26px" title="Save configuration to config.json" onclick="saveConfig()">
+        <i data-lucide="save" size="13"></i>
+      </button>
+      <button class="pnl-mode-btn active" id="btn-panelb-course" onclick="PanelB.setMode('course')" title="Course Reader">
+        <i data-lucide="book-open" size="12"></i>
+      </button>
+      <button class="pnl-mode-btn" id="btn-panelb-notes" onclick="PanelB.setMode('notes')" title="Notes">
+        <i data-lucide="notebook-pen" size="12"></i>
+      </button>
+      <div class="hdr-sep" style="height:16px;margin:0 2px"></div>
+      <button class="hdr-btn" id="btn-panelb-minimize" title="Minimize / restore panel" onclick="PanelB.toggleMinimize()" style="width:26px;height:26px">
+        <i data-lucide="panel-right-close" size="13"></i>
+      </button>
+    </div>
+    <div class="panel-body" id="panel-b-body" style="padding:0">
+      <div id="pw-bar">
+        <i data-lucide="key" size="13"></i>
+        Password: <code id="pw-display">Handout4ETB</code>
+        <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="copyPw()">
+          <i data-lucide="copy" size="11"></i> Copy
+        </button>
+        <span style="flex:1"></span>
+        <button class="btn btn-ghost" style="padding:1px 7px;font-size:15px;line-height:1.2" onclick="ReaderZoom.change(-0.1)" title="Zoom out">−</button>
+        <span id="reader-zoom-level" style="font-size:11px;min-width:32px;text-align:center;color:#94a3b8">100%</span>
+        <button class="btn btn-ghost" style="padding:1px 7px;font-size:15px;line-height:1.2" onclick="ReaderZoom.change(0.1)" title="Zoom in">+</button>
+        <button class="btn btn-ghost" style="padding:1px 5px;font-size:10px" onclick="ReaderZoom.reset()" title="Reset zoom">1:1</button>
+        <span style="display:inline-block;width:1px;background:#2d3154;height:14px;margin:0 3px"></span>
+        <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Markers.addReading()">
+          <i data-lucide="map-pin" size="11"></i> Mark Position
+        </button>
+        <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="showReadingMarkers()">
+          <i data-lucide="list" size="11"></i>
+        </button>
+      </div>
+      <div id="reader-tab-bar">
+        <div id="reader-tabs-list"></div>
+        <div id="reader-tab-input-area">
+          <input type="url" id="reader-url-input" placeholder="URL…" style="font-size:11px;padding:2px 6px;height:22px;width:150px;border-radius:4px" onkeydown="if(event.key==='Enter')TabManager.openFromInput()">
+          <button class="btn btn-ghost" style="padding:2px 5px;flex-shrink:0" onclick="TabManager.openFromInput()" title="Open in new tab"><i data-lucide="plus" size="11"></i></button>
+          <label class="btn btn-ghost" style="padding:2px 5px;cursor:pointer;flex-shrink:0" title="Open local HTML/PDF file">
+            <i data-lucide="file" size="11"></i>
+            <input type="file" accept=".html,.htm,.pdf" style="display:none" onchange="TabManager.openFileInTab(this)">
+          </label>
+        </div>
+      </div>
+      <div id="reader-frames-container">
+        <!-- iframes injected by TabManager.init() -->
+      </div>
+      <!-- Notes mode inside Panel B -->
+      <div id="panelb-notes-wrap">
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="notes-tab active" id="pbn-tab-edit" onclick="PanelBNotes.setTab('edit')">Edit</button>
+          <button class="notes-tab" id="pbn-tab-preview" onclick="PanelBNotes.setTab('preview')">Preview</button>
+          <div style="flex:1"></div>
+          <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Notes.exportMd()">
+            <i data-lucide="download" size="11"></i> Export
+          </button>
+        </div>
+        <textarea id="panelb-notes-editor" placeholder="Write markdown notes here…
+- [ ] Task item
+**bold** _italic_
+# Heading" oninput="PanelBNotes.sync()"></textarea>
+        <div id="panelb-notes-preview"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#main-layout -->
+
+<!-- ═══════════════════ NOTES PANEL ═══════════════════ -->
+<div id="notes-panel" class="collapsed">
+  <div id="notes-bar" onclick="Notes.cycleSize()">
+    <i data-lucide="notebook-pen" size="14" style="color:#7c8cf8;flex-shrink:0"></i>
+    <span id="notes-title">Notes</span>
+    <div style="flex:1"></div>
+    <div style="display:flex;gap:4px" onclick="event.stopPropagation()">
+      <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Notes.exportMd()">
+        <i data-lucide="download" size="11"></i> Export
+      </button>
+      <label class="btn btn-ghost" style="padding:2px 8px;font-size:11px;cursor:pointer">
+        <i data-lucide="upload" size="11"></i> Import
+        <input type="file" accept=".md,.txt" style="display:none" onchange="Notes.importMd(this)">
+      </label>
+    </div>
+    <i data-lucide="chevron-up" size="14" id="notes-chevron" style="color:#64748b;flex-shrink:0;margin-left:6px"></i>
+  </div>
+  <div id="notes-content">
+    <div id="notes-tabs">
+      <button class="notes-tab active" onclick="Notes.setTab('edit')">Edit</button>
+      <button class="notes-tab" onclick="Notes.setTab('preview')">Preview</button>
+    </div>
+    <textarea id="notes-editor" placeholder="Write markdown notes here...
+- [ ] Task item
+- [x] Done item
+# Heading
+**bold** _italic_
+[link text](https://example.com)
+" oninput="Notes.save()"></textarea>
+    <div id="notes-preview"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ MODALS ═══════════════════ -->
+
+<!-- Reading markers modal -->
+<div id="reading-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
+  <div class="card" style="width:420px;max-height:70vh;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-weight:700;color:#7c8cf8">Reading Markers</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Markers.exportReading()">
+        <i data-lucide="download" size="11"></i>
+      </button>
+      <label class="btn btn-ghost" style="padding:2px 8px;font-size:11px;cursor:pointer">
+        <i data-lucide="upload" size="11"></i>
+        <input type="file" accept=".json" style="display:none" onchange="Markers.importReading(this)">
+      </label>
+      <button class="hdr-btn" onclick="closeReadingMarkers()"><i data-lucide="x" size="14"></i></button>
+    </div>
+    <div id="reading-markers-list" style="overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+  </div>
+</div>
+
+<!-- YouTube URL prompt modal -->
+<div id="yt-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
+  <div class="card" style="width:380px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-weight:700;color:#7c8cf8">Enter YouTube URL</span>
+      <div style="flex:1"></div>
+      <button class="hdr-btn" onclick="closeYtModal()"><i data-lucide="x" size="14"></i></button>
+    </div>
+    <input type="url" id="yt-url-input" placeholder="https://www.youtube.com/watch?v=..." style="font-size:13px">
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeYtModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="Video.loadFromYtModal()">Load</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add marker label modal -->
+<div id="marker-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
+  <div class="card" style="width:360px;display:flex;flex-direction:column;gap:10px">
+    <div style="font-weight:700;color:#7c8cf8" id="marker-modal-title">Add Marker</div>
+    <input type="text" id="marker-label-input" placeholder="Label for this position…" style="font-size:13px">
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeMarkerModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="markerModalConfirm()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Local video modal -->
+<div id="local-video-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
+  <div class="card" style="width:440px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-weight:700;color:#7c8cf8">Open Local Video</span>
+      <div style="flex:1"></div>
+      <button class="hdr-btn" onclick="closeLocalVideoModal()"><i data-lucide="x" size="14"></i></button>
+    </div>
+    <div style="font-size:12px;color:#94a3b8">Full file path — server streams it with moov relocation for instant seeking.</div>
+    <input type="text" id="local-video-path-input" placeholder="C:\path\to\video.mp4  or  /path/to/video.mp4" style="font-size:12px" onkeydown="if(event.key==='Enter')Video.loadLocalPathFromModal()">
+    <div style="font-size:11px;color:#64748b;text-align:center">— or pick a file directly (blob URL) —</div>
+    <label class="btn btn-ghost" style="cursor:pointer;justify-content:center">
+      <i data-lucide="folder-open" size="13"></i> Browse…
+      <input type="file" accept="video/*" style="display:none" onchange="Video.loadLocalFileBlob(this)">
+    </label>
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeLocalVideoModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="Video.loadLocalPathFromModal()">Stream via Server</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add external video modal -->
+<div id="ext-video-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
+  <div class="card" style="width:380px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-weight:700;color:#7c8cf8">Add Video to List</span>
+      <div style="flex:1"></div>
+      <button class="hdr-btn" onclick="closeExtVideoModal()"><i data-lucide="x" size="14"></i></button>
+    </div>
+    <input type="url" id="ext-video-url" placeholder="YouTube URL or direct video URL…" style="font-size:12px" onkeydown="if(event.key==='Enter')ExternalVideos.confirmAdd()">
+    <input type="text" id="ext-video-title" placeholder="Title (optional)" style="font-size:12px">
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeExtVideoModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="ExternalVideos.confirmAdd()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Image viewer modal -->
+<div id="image-viewer-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.93);align-items:center;justify-content:center">
+  <img id="image-viewer-img" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.8)" onclick="event.stopPropagation()" alt="">
+  <button onclick="ImageViewer.close()" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:50%;width:36px;height:36px;cursor:pointer;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
+</div>
+
+<div id="toast">Copied!</div>
+<input type="file" id="import-all-input" accept=".json" style="display:none" onchange="IO.doImportAll(this)">
+
+<!-- ═══════════════════ SCRIPT ═══════════════════ -->
+<script>
+// ────────────────────────────────────────────────────────────
+// GLOBALS
+// ────────────────────────────────────────────────────────────
+let appConfig = null;
+let ytPlayer = null;
+let currentVideo = null;          // { id, youtubeId, localFile, subtitleFile, title }
+let subtitlesEnabled = true;
+let allSubtitleCues = {};         // { videoId: { lang: [{start, end, text}] } }
+let currentSubLang = localStorage.getItem('oc_sub_lang') || '';
+let subtitleLoadQueue = [];
+let panelContents = { a: 'video', b: 'reading' };
+let markerModalCallback = null;
+
+function fmt(s) {
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  return `${m}:${String(ss).padStart(2,'0')}`;
+}
+
+function toast(msg, dur=2000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+function dl(filename, text, mime='application/json') {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type: mime}));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ────────────────────────────────────────────────────────────
+// THEME
+// ────────────────────────────────────────────────────────────
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+}
+document.addEventListener('fullscreenchange', () => {
+  const icon = document.querySelector('#btn-fullscreen [data-lucide]');
+  if (icon) {
+    icon.setAttribute('data-lucide', document.fullscreenElement ? 'minimize' : 'maximize');
+    lucide.createIcons();
+  }
+});
+
+const Theme = {
+  init() {
+    const saved = localStorage.getItem('oc_theme') || 'dark';
+    this.apply(saved);
+  },
+  toggle() {
+    const cur = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    this.apply(cur === 'dark' ? 'light' : 'dark');
+  },
+  apply(mode) {
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+    document.documentElement.classList.toggle('light', mode === 'light');
+    localStorage.setItem('oc_theme', mode);
+    const icon = document.querySelector('#btn-theme [data-lucide]');
+    if (icon) { icon.setAttribute('data-lucide', mode === 'dark' ? 'sun' : 'moon'); lucide.createIcons(); }
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// LAYOUT
+// ────────────────────────────────────────────────────────────
+const Layout = {
+  mode: 'horizontal',
+  splitPct: 50,
+  init() {
+    this.mode = localStorage.getItem('oc_layout') || 'horizontal';
+    this.splitPct = parseFloat(localStorage.getItem('oc_split') || '50');
+    this.setMode(this.mode, true);
+    this.initResizer();
+  },
+  setMode(mode, silent=false) {
+    this.mode = mode;
+    const ml = document.getElementById('main-layout');
+    ml.classList.toggle('vertical', mode === 'vertical');
+    document.getElementById('btn-layout-h').classList.toggle('active', mode === 'horizontal');
+    document.getElementById('btn-layout-v').classList.toggle('active', mode === 'vertical');
+    this.applySplit();
+    if (!silent) localStorage.setItem('oc_layout', mode);
+  },
+  applySplit() {
+    if (typeof PanelB !== 'undefined' && PanelB.minimized) return;
+    if (typeof PanelA !== 'undefined' && PanelA.minimized) return;
+    const pa = document.getElementById('panel-a');
+    const pb = document.getElementById('panel-b');
+    const pct = this.splitPct;
+    if (this.mode === 'horizontal') {
+      pa.style.width = pct + '%'; pa.style.height = '100%';
+      pb.style.width = (100 - pct) + '%'; pb.style.height = '100%';
+    } else {
+      pa.style.height = pct + '%'; pa.style.width = '100%';
+      pb.style.height = (100 - pct) + '%'; pb.style.width = '100%';
+    }
+  },
+  initResizer() {
+    const r = document.getElementById('resizer');
+    let dragging = false;
+    r.addEventListener('mousedown', e => {
+      dragging = true;
+      r.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      // Transparent overlay prevents iframe from stealing mouse events during drag
+      const ov = document.createElement('div');
+      ov.id = 'drag-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9999;' +
+        (this.mode === 'horizontal' ? 'cursor:col-resize' : 'cursor:row-resize');
+      document.body.appendChild(ov);
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const ml = document.getElementById('main-layout');
+      const rect = ml.getBoundingClientRect();
+      // Use absolute position within the container (not delta) to avoid drift
+      const pos    = this.mode === 'horizontal' ? e.clientX : e.clientY;
+      const origin = this.mode === 'horizontal' ? rect.left  : rect.top;
+      const total  = this.mode === 'horizontal' ? rect.width : rect.height;
+      let pct = ((pos - origin) / total) * 100;
+      pct = Math.max(15, Math.min(85, pct));
+      this.splitPct = pct;
+      this.applySplit();
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      r.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.getElementById('drag-overlay')?.remove();
+      localStorage.setItem('oc_split', String(this.splitPct));
+    });
+  },
+  swap() {
+    const aBody = document.getElementById('panel-a-body');
+    const bBody = document.getElementById('panel-b-body');
+    const aLabel = document.getElementById('panel-a-label');
+    const bLabel = document.getElementById('panel-b-label');
+
+    // Move live DOM nodes (no innerHTML copy — preserves iframe content + video state)
+    const fragA = document.createDocumentFragment();
+    const fragB = document.createDocumentFragment();
+    while (aBody.firstChild) fragA.appendChild(aBody.firstChild);
+    while (bBody.firstChild) fragB.appendChild(bBody.firstChild);
+    aBody.appendChild(fragB);
+    bBody.appendChild(fragA);
+
+    const tmpL = aLabel.textContent;
+    aLabel.textContent = bLabel.textContent;
+    bLabel.textContent = tmpL;
+
+    const tmpC = panelContents.a;
+    panelContents.a = panelContents.b;
+    panelContents.b = tmpC;
+
+    lucide.createIcons();
+    toast('Panels swapped');
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// TAB MANAGER (Course Reader tabs)
+// ────────────────────────────────────────────────────────────
+const TabManager = {
+  tabs: [],
+  activeId: null,
+  _storageKey: null,
+
+  init() {
+    this._storageKey = `oc_reader_tabs_${appConfig._dirId || 'default'}`;
+    const saved = this._loadFromStorage();
+    if (saved && saved.tabs && saved.tabs.length > 0) {
+      this.tabs = saved.tabs;
+      this.activeId = saved.tabs.find(t => t.id === saved.activeId) ? saved.activeId : saved.tabs[0].id;
+    } else {
+      const courseUrl = appConfig.courseUrl || '';
+      this.tabs = [{ id: 'course', title: 'Course', url: courseUrl, type: 'course', scrollY: 0 }];
+      this.activeId = 'course';
+    }
+    this._createAllFrames();
+    this._renderTabBar();
+    this._applyActiveTab();
+    // Load course tab content through proxy
+    const courseTab = this.tabs.find(t => t.type === 'course');
+    if (courseTab) {
+      const frame = document.getElementById(`reader-frame-${courseTab.id}`);
+      if (frame) loadCourseFrame(frame);
+    }
+  },
+
+  _createAllFrames() {
+    const container = document.getElementById('reader-frames-container');
+    if (!container) return;
+    container.innerHTML = '';
+    for (const tab of this.tabs) {
+      if (tab.type === 'image-viewer') this._createImageViewerFrame(tab);
+      else this._createFrame(tab);
+    }
+  },
+
+  _createImageViewerFrame(tab) {
+    const container = document.getElementById('reader-frames-container');
+    if (!container) return null;
+    const div = document.createElement('div');
+    div.id = `reader-frame-${tab.id}`;
+    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;padding:12px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start';
+    div.innerHTML = (tab.images || []).map(img => `<img src="${encodeURIComponent(img).replace(/%2F/g,'/')}" onclick="ImageViewer.open(this.src)" style="height:120px;width:auto;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:border-color .15s" onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='transparent'" alt="${img}">`).join('');
+    container.appendChild(div);
+    return div;
+  },
+
+  openImageViewer(images) {
+    const existing = this.tabs.find(t => t.type === 'image-viewer');
+    if (existing) { this.switchTo(existing.id); return; }
+    const id = 'img_viewer';
+    const tab = { id, title: '🖼 Images', url: '', type: 'image-viewer', images, scrollY: 0 };
+    this.tabs.push(tab);
+    this._createImageViewerFrame(tab);
+    this.activeId = id;
+    this._renderTabBar();
+    this._applyActiveTab();
+    this._save();
+  },
+
+  _createFrame(tab) {
+    const container = document.getElementById('reader-frames-container');
+    if (!container) return null;
+    const frame = document.createElement('iframe');
+    frame.id = `reader-frame-${tab.id}`;
+    frame.className = 'reader-frame-slot';
+    frame.allow = 'autoplay; fullscreen; clipboard-write';
+    frame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;visibility:hidden;pointer-events:none;border-radius:8px';
+    if (tab.type !== 'course' && tab.url && !tab.url.startsWith('blob:')) frame.src = tab.url;
+    else if (tab.type !== 'course' && tab.url) frame.src = tab.url;
+    container.appendChild(frame);
+    return frame;
+  },
+
+  _renderTabBar() {
+    const list = document.getElementById('reader-tabs-list');
+    if (!list) return;
+    list.innerHTML = this.tabs.map(tab => {
+      const closeBtn = this.tabs.length > 1
+        ? `<button class="reader-tab-close" onclick="event.stopPropagation();TabManager.closeTab('${tab.id}')" title="Close">×</button>`
+        : '';
+      return `<div class="reader-tab${tab.id === this.activeId ? ' active' : ''}" onclick="TabManager.switchTo('${tab.id}')">
+        <span class="reader-tab-title" title="${tab.title}">${tab.title}</span>
+        ${closeBtn}
+      </div>`;
+    }).join('');
+  },
+
+  _applyActiveTab() {
+    const zoom = typeof ReaderZoom !== 'undefined' ? ReaderZoom.level : 1.0;
+    for (const tab of this.tabs) {
+      const frame = document.getElementById(`reader-frame-${tab.id}`);
+      if (!frame) continue;
+      const active = tab.id === this.activeId;
+      frame.style.visibility = active ? 'visible' : 'hidden';
+      frame.style.pointerEvents = active ? 'auto' : 'none';
+      if (active && tab.type !== 'image-viewer') frame.style.zoom = zoom === 1.0 ? '' : zoom;
+    }
+  },
+
+  switchTo(id) {
+    if (!this.tabs.find(t => t.id === id)) return;
+    this._saveCurrentScroll();
+    this.activeId = id;
+    this._renderTabBar();
+    this._applyActiveTab();
+    this._save();
+  },
+
+  openTab(url, title, type = 'custom') {
+    const existing = this.tabs.find(t => t.url === url && t.type === type);
+    if (existing) { this.switchTo(existing.id); return; }
+    const id = 'tab_' + Date.now();
+    const tab = { id, title, url, type, scrollY: 0 };
+    this.tabs.push(tab);
+    this._createFrame(tab);
+    this.activeId = id;
+    this._renderTabBar();
+    this._applyActiveTab();
+    this._save();
+  },
+
+  openFromInput() {
+    const url = document.getElementById('reader-url-input')?.value.trim();
+    if (!url) return;
+    const title = (() => { try { return new URL(url).hostname || url; } catch { return url.length > 30 ? url.substring(0, 28) + '…' : url; } })();
+    document.getElementById('reader-url-input').value = '';
+    this.openTab(url, title, 'custom');
+  },
+
+  openFileInTab(input) {
+    const file = input.files[0]; if (!file) return;
+    const url = URL.createObjectURL(file);
+    this.openTab(url, file.name, 'file');
+    input.value = '';
+  },
+
+  closeTab(id) {
+    if (this.tabs.length <= 1) return;
+    const idx = this.tabs.findIndex(t => t.id === id);
+    if (idx < 0) return;
+    document.getElementById(`reader-frame-${id}`)?.remove();
+    this.tabs.splice(idx, 1);
+    if (this.activeId === id) this.activeId = this.tabs[Math.max(0, idx - 1)].id;
+    this._renderTabBar();
+    this._applyActiveTab();
+    this._save();
+  },
+
+  getActiveFrame() {
+    return document.getElementById(`reader-frame-${this.activeId}`);
+  },
+
+  _saveCurrentScroll() {
+    const frame = this.getActiveFrame();
+    const tab = this.tabs.find(t => t.id === this.activeId);
+    if (!frame || !tab) return;
+    try { tab.scrollY = frame.contentWindow.scrollY || 0; } catch { /* cross-origin */ }
+  },
+
+  _loadFromStorage() {
+    if (!this._storageKey) return null;
+    try { return JSON.parse(localStorage.getItem(this._storageKey)); } catch { return null; }
+  },
+
+  _save() {
+    if (!this._storageKey) return;
+    const toSave = this.tabs.map(t => {
+      const s = {
+        id: t.id, title: t.title, type: t.type, scrollY: t.scrollY || 0,
+        url: t.url && t.url.startsWith('blob:') ? '' : (t.url || '')
+      };
+      if (t.type === 'image-viewer' && t.images) s.images = t.images;
+      return s;
+    });
+    localStorage.setItem(this._storageKey, JSON.stringify({ tabs: toSave, activeId: this.activeId }));
+  }
+};
+
+// Reader: thin wrapper for backward-compat
+const Reader = {
+  init() { /* TabManager.init() called from init() directly */ },
+  loadUrl() { TabManager.openFromInput(); },
+  loadFile(input) { TabManager.openFileInTab(input); }
+};
+
+// ────────────────────────────────────────────────────────────
+// READER ZOOM
+// ────────────────────────────────────────────────────────────
+const ReaderZoom = {
+  level: 1.0,
+  init() {
+    this.level = parseFloat(localStorage.getItem('oc_reader_zoom') || '1.0');
+    this._apply();
+  },
+  change(delta) {
+    this.level = Math.round(Math.max(0.5, Math.min(3.0, this.level + delta)) * 10) / 10;
+    localStorage.setItem('oc_reader_zoom', String(this.level));
+    this._apply();
+  },
+  reset() {
+    this.level = 1.0;
+    localStorage.removeItem('oc_reader_zoom');
+    this._apply();
+  },
+  _apply() {
+    const frame = typeof TabManager !== 'undefined' ? TabManager.getActiveFrame() : null;
+    if (frame) frame.style.zoom = this.level === 1.0 ? '' : this.level;
+    const el = document.getElementById('reader-zoom-level');
+    if (el) el.textContent = Math.round(this.level * 100) + '%';
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// PANEL A (minimize/restore)
+// ────────────────────────────────────────────────────────────
+const PanelA = {
+  minimized: false,
+
+  init() {
+    this.minimized = localStorage.getItem('oc_panela_min') === '1';
+    if (this.minimized) this._applyMinimize();
+  },
+
+  toggleMinimize() {
+    this.minimized = !this.minimized;
+    this._applyMinimize();
+    localStorage.setItem('oc_panela_min', this.minimized ? '1' : '0');
+  },
+
+  _applyMinimize() {
+    const pa = document.getElementById('panel-a');
+    const pb = document.getElementById('panel-b');
+    const paBody = document.getElementById('panel-a-body');
+    const restore = document.getElementById('panel-a-restore');
+    const btnIcon = document.querySelector('#btn-panela-minimize [data-lucide]');
+    if (this.minimized) {
+      pa.style.cssText = 'flex:none;width:32px;min-width:32px;overflow:hidden;position:relative';
+      pb.style.flex = '1 1 auto';
+      pb.style.width = '';
+      if (paBody) paBody.style.display = 'none';
+      if (restore) restore.style.display = 'flex';
+      if (btnIcon) { btnIcon.setAttribute('data-lucide', 'panel-left-open'); lucide.createIcons(); }
+    } else {
+      pa.style.cssText = '';
+      pb.style.flex = '';
+      if (paBody) paBody.style.display = '';
+      if (restore) restore.style.display = 'none';
+      if (!PanelB.minimized) Layout.applySplit();
+      if (btnIcon) { btnIcon.setAttribute('data-lucide', 'panel-left-close'); lucide.createIcons(); }
+    }
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// PANEL B (Course Reader / Notes toggle + minimize)
+// ────────────────────────────────────────────────────────────
+const PanelB = {
+  mode: 'course',
+  minimized: false,
+
+  init() {
+    this.mode = localStorage.getItem('oc_panelb_mode') || 'course';
+    this.minimized = localStorage.getItem('oc_panelb_min') === '1';
+    if (appConfig?.courseUrl) {
+      const link = document.getElementById('course-url-link');
+      const text = document.getElementById('course-url-text');
+      if (link) { link.href = appConfig.courseUrl; link.style.display = 'flex'; }
+      if (text) {
+        try { text.textContent = new URL(appConfig.courseUrl).hostname; } catch { text.textContent = ''; }
+      }
+    }
+    if (this.minimized) this._applyMinimize();
+    else this.setMode(this.mode, true);
+  },
+
+  setMode(mode, silent = false) {
+    this.mode = mode;
+    const pwBar = document.getElementById('pw-bar');
+    const tabBar = document.getElementById('reader-tab-bar');
+    const framesContainer = document.getElementById('reader-frames-container');
+    const notesWrap = document.getElementById('panelb-notes-wrap');
+    const btnCourse = document.getElementById('btn-panelb-course');
+    const btnNotes = document.getElementById('btn-panelb-notes');
+    const labelEl = document.getElementById('panel-b-label');
+    const iconEl = document.getElementById('panel-b-icon');
+
+    if (mode === 'notes') {
+      if (pwBar) pwBar.style.display = 'none';
+      if (tabBar) tabBar.style.display = 'none';
+      if (framesContainer) framesContainer.style.display = 'none';
+      if (notesWrap) notesWrap.style.display = 'flex';
+      if (btnCourse) btnCourse.classList.remove('active');
+      if (btnNotes) btnNotes.classList.add('active');
+      if (labelEl) labelEl.textContent = 'Notes';
+      if (iconEl) iconEl.setAttribute('data-lucide', 'notebook-pen');
+      PanelBNotes.pullFromMain();
+    } else {
+      if (pwBar) pwBar.style.display = '';
+      if (tabBar) tabBar.style.display = '';
+      if (framesContainer) framesContainer.style.display = '';
+      if (notesWrap) notesWrap.style.display = 'none';
+      if (btnCourse) btnCourse.classList.add('active');
+      if (btnNotes) btnNotes.classList.remove('active');
+      if (labelEl) labelEl.textContent = 'Course Reader';
+      if (iconEl) iconEl.setAttribute('data-lucide', 'book-open');
+    }
+    lucide.createIcons();
+    if (!silent) localStorage.setItem('oc_panelb_mode', mode);
+  },
+
+  toggleMinimize() {
+    this.minimized = !this.minimized;
+    this._applyMinimize();
+    localStorage.setItem('oc_panelb_min', this.minimized ? '1' : '0');
+  },
+
+  _applyMinimize() {
+    const pb = document.getElementById('panel-b');
+    const pa = document.getElementById('panel-a');
+    const pbBody = document.getElementById('panel-b-body');
+    const restore = document.getElementById('panel-b-restore');
+    const btnIcon = document.querySelector('#btn-panelb-minimize [data-lucide]');
+    if (this.minimized) {
+      pb.style.cssText = 'flex:none;width:32px;min-width:32px;overflow:hidden;position:relative';
+      pa.style.flex = '1 1 auto';
+      pa.style.width = '';
+      if (pbBody) pbBody.style.display = 'none';
+      if (restore) restore.style.display = 'flex';
+      if (btnIcon) { btnIcon.setAttribute('data-lucide', 'panel-right-open'); lucide.createIcons(); }
+    } else {
+      pb.style.cssText = '';
+      pa.style.flex = '';
+      if (pbBody) pbBody.style.display = '';
+      if (restore) restore.style.display = 'none';
+      Layout.applySplit();
+      if (btnIcon) { btnIcon.setAttribute('data-lucide', 'panel-right-close'); lucide.createIcons(); }
+    }
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// PANEL B NOTES (notes editor embedded in Panel B)
+// ────────────────────────────────────────────────────────────
+const PanelBNotes = {
+  tab: 'edit',
+
+  pullFromMain() {
+    const val = localStorage.getItem('oc_notes') || '';
+    const ed = document.getElementById('panelb-notes-editor');
+    if (ed && ed.value !== val) ed.value = val;
+  },
+
+  sync() {
+    const val = document.getElementById('panelb-notes-editor')?.value || '';
+    localStorage.setItem('oc_notes', val);
+    const mainEd = document.getElementById('notes-editor');
+    if (mainEd) mainEd.value = val;
+    if (this.tab === 'preview') this._renderPreview();
+  },
+
+  setTab(tab) {
+    this.tab = tab;
+    document.getElementById('pbn-tab-edit')?.classList.toggle('active', tab === 'edit');
+    document.getElementById('pbn-tab-preview')?.classList.toggle('active', tab === 'preview');
+    const ed = document.getElementById('panelb-notes-editor');
+    const pv = document.getElementById('panelb-notes-preview');
+    if (ed) ed.style.display = tab === 'edit' ? '' : 'none';
+    if (pv) pv.style.display = tab === 'preview' ? '' : 'none';
+    if (tab === 'preview') this._renderPreview();
+  },
+
+  _renderPreview() {
+    const md = document.getElementById('panelb-notes-editor')?.value || '';
+    const html = DOMPurify.sanitize(marked.parse(md), { ADD_ATTR: ['target', 'rel'] });
+    const pv = document.getElementById('panelb-notes-preview');
+    if (pv) {
+      pv.innerHTML = html;
+      pv.querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+    }
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// VIDEO
+// ────────────────────────────────────────────────────────────
+const Video = {
+  currentYtId: null,
+  currentLocalUrl: null,
+  _playAfterSeek: false,
+  _savePositionInterval: null,
+
+  _startSavingPosition() {
+    clearInterval(this._savePositionInterval);
+    this._savePositionInterval = setInterval(() => {
+      if (!currentVideo) return;
+      const t = this.getCurrentTime();
+      if (t > 3) localStorage.setItem(`oc_vid_pos_${currentVideo.id}`, Math.floor(t));
+    }, 5000);
+  },
+
+  _getSavedPosition(videoId) {
+    const t = parseInt(localStorage.getItem(`oc_vid_pos_${videoId}`) || '0', 10);
+    return t > 3 ? t : null;
+  },
+
+  load(videoEntry) {
+    currentVideo = videoEntry;
+    localStorage.setItem('oc_last_video_id', videoEntry.id);
+    this.currentYtId = videoEntry.youtubeId || null;
+    this.currentLocalUrl = null;
+    const wrapper = document.getElementById('video-wrapper');
+    const noSrc = `<div style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#0a0c1a;color:#94a3b8;font-size:13px">No video source</div><div id="subtitle-overlay" style="display:none"></div>`;
+
+    const loadFallback = () => {
+      const ytIdToUse = videoEntry.youtubeId || (videoEntry.localFile ? extractYtIdFromFilename(videoEntry.localFile) : null);
+      if (ytIdToUse) this._loadYouTube(ytIdToUse);
+      else if (videoEntry.externalUrl) {
+        ytPlayer = null; this.currentYtId = null; this.currentLocalUrl = videoEntry.externalUrl;
+        wrapper.innerHTML = `<video id="local-video" controls style="width:100%;height:100%;position:absolute;inset:0;background:#000"><source src="${videoEntry.externalUrl}"></video><div id="subtitle-overlay" style="display:none"></div>`;
+        Sub._applyStoredStyle(document.getElementById('subtitle-overlay'));
+        Sub.startTracking();
+      }
+      else wrapper.innerHTML = noSrc;
+    };
+
+    if (videoEntry.localFile) {
+      const encodedPath = videoEntry.localFile.split('/').map(encodeURIComponent).join('/');
+      fetch(encodedPath, { method: 'HEAD' })
+        .then(r => {
+          const size = parseInt(r.headers.get('content-length') || '0', 10);
+          if (r.ok && size > 0) this._loadLocalByPath(encodedPath, wrapper);
+          else loadFallback();
+        })
+        .catch(loadFallback);
+    } else {
+      loadFallback();
+    }
+
+    // Subtitle + UI updates are sync — don't depend on video source resolution
+    Sub._loadVideoSubs(videoEntry);
+    Sub._updateLangSelector();
+    document.querySelectorAll('.file-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.id === videoEntry.id);
+    });
+    Markers.renderVideoMarkers();
+  },
+
+  _seekOnLoad: null,
+
+  _loadLocalByPath(encodedPath, wrapper) {
+    ytPlayer = null;
+    this.currentYtId = null;
+    this.currentLocalUrl = encodedPath;
+    wrapper.innerHTML = `
+      <video id="local-video" controls style="width:100%;height:100%;position:absolute;inset:0;background:#000">
+        <source src="${encodedPath}">
+      </video>
+      <div id="subtitle-overlay" style="display:none"></div>`;
+    Sub._applyStoredStyle(document.getElementById('subtitle-overlay'));
+    const vid = document.getElementById('local-video');
+    if (vid) {
+      vid.addEventListener('loadedmetadata', () => {
+        const saved = this._getSavedPosition(currentVideo?.id);
+        vid.currentTime = (this._seekOnLoad !== null) ? this._seekOnLoad : (saved ?? 1);
+        this._seekOnLoad = null;
+        if (this._playAfterSeek) { this._playAfterSeek = false; vid.play().catch(() => {}); }
+        this._startSavingPosition();
+      }, { once: true });
+    }
+    Sub.startTracking();
+  },
+
+  _loadYouTube(ytId) {
+    this.currentYtId = ytId;
+    const wrapper = document.getElementById('video-wrapper');
+    wrapper.innerHTML = `
+      <div id="yt-player-container" style="width:100%;height:100%;position:absolute;inset:0"></div>
+      <div id="subtitle-overlay" style="display:none"></div>`;
+    Sub._applyStoredStyle(document.getElementById('subtitle-overlay'));
+
+    if (window.YT && window.YT.Player) {
+      this._createPlayer(ytId);
+    } else {
+      window._ytPendingId = ytId;
+      if (!document.getElementById('yt-api-script')) {
+        const s = document.createElement('script');
+        s.id = 'yt-api-script';
+        s.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(s);
+      }
+    }
+  },
+
+  _createPlayer(ytId) {
+    ytPlayer = new YT.Player('yt-player-container', {
+      videoId: ytId,
+      playerVars: { autoplay: 0, rel: 0, cc_load_policy: 0 },
+      events: {
+        onReady: () => {
+          const saved = this._getSavedPosition(currentVideo?.id);
+          if (this._seekOnLoad !== null) {
+            ytPlayer.seekTo(this._seekOnLoad, true);
+            this._seekOnLoad = null;
+          } else if (saved) {
+            ytPlayer.seekTo(saved, true);
+          }
+          if (this._playAfterSeek) { this._playAfterSeek = false; ytPlayer.playVideo(); }
+          Sub.startTracking();
+          this._startSavingPosition();
+        }
+      }
+    });
+  },
+
+  openLocalModal() {
+    document.getElementById('local-video-modal').style.display = 'flex';
+    document.getElementById('local-video-path-input').value = '';
+    setTimeout(() => document.getElementById('local-video-path-input').focus(), 50);
+  },
+
+  loadLocalPathFromModal() {
+    const path = document.getElementById('local-video-path-input')?.value.trim();
+    if (!path) { toast('Enter a file path'); return; }
+    closeLocalVideoModal();
+    const encodedUrl = '/local-video?path=' + encodeURIComponent(path);
+    const name = path.split(/[/\\]/).pop();
+    currentVideo = { id: 'local_path_' + Date.now(), title: name, youtubeId: null, localFile: null, externalUrl: encodedUrl };
+    ExternalVideos._addIfNew({ ...currentVideo });
+    const wrapper = document.getElementById('video-wrapper');
+    this._loadLocalByPath(encodedUrl, wrapper);
+    document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+    Markers.renderVideoMarkers();
+  },
+
+  loadLocalFileBlob(input) {
+    const file = input.files[0]; if (!file) return;
+    closeLocalVideoModal();
+    const url = URL.createObjectURL(file);
+    ytPlayer = null;
+    this.currentYtId = null;
+    this.currentLocalUrl = url;
+    currentVideo = { id: 'local_blob_' + Date.now(), title: file.name, youtubeId: null, localFile: null };
+    const wrapper = document.getElementById('video-wrapper');
+    wrapper.innerHTML = `
+      <video id="local-video" controls style="width:100%;height:100%;position:absolute;inset:0;background:#000">
+        <source src="${url}">
+      </video>
+      <div id="subtitle-overlay" style="display:none"></div>`;
+    Sub._applyStoredStyle(document.getElementById('subtitle-overlay'));
+    const vid = document.getElementById('local-video');
+    if (vid) vid.addEventListener('loadedmetadata', () => { vid.currentTime = 1; }, { once: true });
+    Sub.startTracking();
+    input.value = '';
+    Markers.renderVideoMarkers();
+  },
+
+  play() {
+    if (ytPlayer && ytPlayer.playVideo) { ytPlayer.playVideo(); return; }
+    const v = document.getElementById('local-video');
+    if (v) v.play().catch(() => {});
+  },
+
+  openYouTubePrompt() {
+    document.getElementById('yt-modal').style.display = 'flex';
+    document.getElementById('yt-url-input').focus();
+  },
+
+  loadFromYtModal() {
+    const url = document.getElementById('yt-url-input').value.trim();
+    const id = extractYtId(url);
+    if (!id) { toast('Invalid YouTube URL'); return; }
+    closeYtModal();
+    currentVideo = { id: 'yt_' + id, title: 'YouTube: ' + id, youtubeId: id, localFile: null, subtitleFile: null };
+    ExternalVideos._addIfNew({ ...currentVideo });
+    this._loadYouTube(id);
+  },
+
+  getCurrentTime() {
+    if (ytPlayer && ytPlayer.getCurrentTime) return ytPlayer.getCurrentTime();
+    const v = document.getElementById('local-video');
+    if (v) return v.currentTime;
+    return 0;
+  },
+
+  seekTo(t) {
+    if (ytPlayer && ytPlayer.seekTo) { ytPlayer.seekTo(t, true); return; }
+    const v = document.getElementById('local-video');
+    if (v) v.currentTime = t;
+  }
+};
+
+function extractYtId(url) {
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+function extractYtIdFromFilename(filename) {
+  const m = filename.match(/[\[(]([A-Za-z0-9_-]{11})[\])]/);
+  return m ? m[1] : null;
+}
+
+window.onYouTubeIframeAPIReady = function() {
+  if (window._ytPendingId) Video._createPlayer(window._ytPendingId);
+};
+
+function closeYtModal() {
+  document.getElementById('yt-modal').style.display = 'none';
+  document.getElementById('yt-url-input').value = '';
+}
+
+// ────────────────────────────────────────────────────────────
+// SUBTITLES
+// ────────────────────────────────────────────────────────────
+const Sub = {
+  enabled: true,
+  trackInterval: null,
+  searchDebounce: null,
+
+  toggle() {
+    this.enabled = !this.enabled;
+    const btn = document.getElementById('btn-sub-toggle');
+    const ov = document.getElementById('subtitle-overlay');
+    btn.innerHTML = `<i data-lucide="captions" size="12"></i> Subtitles ${this.enabled ? 'ON' : 'OFF'}`;
+    if (ov) ov.style.display = this.enabled ? '' : 'none';
+    lucide.createIcons();
+  },
+
+  parseSRT(text) {
+    const cues = [];
+    const blocks = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split(/\n\n+/);
+    for (const block of blocks) {
+      const lines = block.trim().split('\n');
+      if (lines.length < 2) continue;
+      const tsLine = lines.find(l => l.includes('-->'));
+      if (!tsLine) continue;
+      const m = tsLine.match(/(\d+:\d+:\d+[,\.]\d+)\s*-->\s*(\d+:\d+:\d+[,\.]\d+)/);
+      if (!m) continue;
+      const start = this._ts(m[1]), end = this._ts(m[2]);
+      const textIdx = lines.indexOf(tsLine) + 1;
+      const text = lines.slice(textIdx).join('\n').replace(/<[^>]+>/g, '').trim();
+      if (text) cues.push({ start, end, text });
+    }
+    return cues;
+  },
+
+  _ts(s) {
+    const p = s.replace(',', '.').split(':');
+    return parseFloat(p[0]) * 3600 + parseFloat(p[1]) * 60 + parseFloat(p[2]);
+  },
+
+  loadFile(videoId, lang, filename) {
+    if (!filename) return;
+    if (!allSubtitleCues[videoId]) allSubtitleCues[videoId] = {};
+    if (allSubtitleCues[videoId][lang]) return;
+    const spinner = document.getElementById('sub-load-spinner');
+    if (spinner) spinner.style.display = '';
+    const encodedFilename = filename.split('/').map(encodeURIComponent).join('/');
+    fetch(encodedFilename)
+      .then(r => { if (!r.ok) throw new Error('Fetch failed'); return r.text(); })
+      .then(text => {
+        allSubtitleCues[videoId][lang] = this.parseSRT(text);
+        if (spinner) spinner.style.display = 'none';
+        if (currentVideo?.id === videoId) this._updateLangSelector();
+        const q = document.getElementById('sub-search-input')?.value.trim();
+        if (q) this.search(q);
+      })
+      .catch(() => {
+        if (spinner) spinner.style.display = 'none';
+        console.warn('Could not fetch subtitle file:', filename);
+      });
+  },
+
+  _loadVideoSubs(v) {
+    if (v.subtitleFiles?.length) {
+      for (const sf of v.subtitleFiles) this.loadFile(v.id, sf.lang, sf.file);
+    } else if (v.subtitleFile) {
+      this.loadFile(v.id, this._detectLang(v.subtitleFile), v.subtitleFile);
+    } else if (v.localFile) {
+      // Auto-detect: swap video extension for .srt (handles start.bat PowerShell bracket bug)
+      const base = v.localFile.replace(/\.(mp4|webm|mkv|avi|mov|m4v)$/i, '');
+      this.loadFile(v.id, 'en', base + '.srt');
+    }
+  },
+
+  _detectLang(filename) {
+    const m = filename.match(/\.([a-z]{2})\.srt$/i);
+    return m ? m[1] : 'en';
+  },
+
+  _updateLangSelector() {
+    if (!currentVideo) return;
+    const vidCues = allSubtitleCues[currentVideo.id] || {};
+    const langs = Object.keys(vidCues);
+    const sel = document.getElementById('sub-lang-select');
+    if (!sel) return;
+    if (langs.length <= 1) {
+      sel.style.display = 'none';
+      if (langs.length === 1 && !langs.includes(currentSubLang)) currentSubLang = langs[0];
+      return;
+    }
+    sel.style.display = '';
+    sel.innerHTML = langs.map(l => `<option value="${l}"${l === currentSubLang ? ' selected' : ''}>${l.toUpperCase()}</option>`).join('');
+    if (!langs.includes(currentSubLang)) { currentSubLang = langs[0]; sel.value = currentSubLang; }
+  },
+
+  setLang(lang) {
+    currentSubLang = lang;
+    localStorage.setItem('oc_sub_lang', lang);
+  },
+
+  setMode(mode) {
+    localStorage.setItem('oc_sub_mode', mode);
+  },
+
+  _applyMode(text) {
+    const mode = localStorage.getItem('oc_sub_mode') || 'multiline';
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (mode === 'online') return lines[lines.length - 1] || text;
+    if (mode === 'online-join') return lines.join(' ');
+    return text;
+  },
+
+  applyStyle() {
+    const size = document.getElementById('sub-size')?.value || '14';
+    const bgColor = document.getElementById('sub-bg-color')?.value || '#000000';
+    const bgOpacity = parseInt(document.getElementById('sub-bg-opacity')?.value || '75', 10) / 100;
+    const textColor = document.getElementById('sub-text-color')?.value || '#ffffff';
+    const sizeVal = document.getElementById('sub-size-val');
+    if (sizeVal) sizeVal.textContent = size + 'px';
+    localStorage.setItem('oc_sub_size', size);
+    localStorage.setItem('oc_sub_bgcolor', bgColor);
+    localStorage.setItem('oc_sub_bgopacity', Math.round(bgOpacity * 100).toString());
+    localStorage.setItem('oc_sub_textcolor', textColor);
+    this._cachedStyle = null;
+    const ov = document.getElementById('subtitle-overlay');
+    if (ov) this._applyStoredStyle(ov);
+  },
+
+  _posX: 0,
+  _posY: 0,
+
+  movePos(dx, dy) {
+    this._posX += dx;
+    this._posY += dy;
+    localStorage.setItem('oc_sub_x', this._posX);
+    localStorage.setItem('oc_sub_y', this._posY);
+    this._applyPos();
+  },
+
+  resetPos() {
+    this._posX = 0; this._posY = 0;
+    localStorage.removeItem('oc_sub_x');
+    localStorage.removeItem('oc_sub_y');
+    this._applyPos();
+  },
+
+  _applyPos() {
+    const ov = document.getElementById('subtitle-overlay');
+    if (!ov) return;
+    ov.style.bottom = (8 + this._posY) + 'px';
+    ov.style.left = `calc(50% + ${this._posX}px)`;
+  },
+
+  _cachedStyle: null,
+
+  _applyStoredStyle(overlay) {
+    if (!overlay) return;
+    if (!this._cachedStyle) {
+      const size = localStorage.getItem('oc_sub_size') || '14';
+      const bgColor = localStorage.getItem('oc_sub_bgcolor') || '#000000';
+      const bgOpacity = parseInt(localStorage.getItem('oc_sub_bgopacity') || '75', 10) / 100;
+      const textColor = localStorage.getItem('oc_sub_textcolor') || '#ffffff';
+      const r = parseInt(bgColor.slice(1, 3), 16) || 0;
+      const g = parseInt(bgColor.slice(3, 5), 16) || 0;
+      const b = parseInt(bgColor.slice(5, 7), 16) || 0;
+      this._cachedStyle = {
+        fontSize: size + 'px',
+        background: `rgba(${r},${g},${b},${bgOpacity})`,
+        color: textColor
+      };
+    }
+    Object.assign(overlay.style, this._cachedStyle);
+    this._applyPos();
+  },
+
+  _initStyleControls() {
+    const size = localStorage.getItem('oc_sub_size') || '14';
+    const bgColor = localStorage.getItem('oc_sub_bgcolor') || '#000000';
+    const bgOpacity = localStorage.getItem('oc_sub_bgopacity') || '75';
+    const textColor = localStorage.getItem('oc_sub_textcolor') || '#ffffff';
+    const sizeEl = document.getElementById('sub-size');
+    const bgColorEl = document.getElementById('sub-bg-color');
+    const bgOpacityEl = document.getElementById('sub-bg-opacity');
+    const textColorEl = document.getElementById('sub-text-color');
+    const sizeValEl = document.getElementById('sub-size-val');
+    if (sizeEl) sizeEl.value = size;
+    if (bgColorEl) bgColorEl.value = bgColor;
+    if (bgOpacityEl) bgOpacityEl.value = bgOpacity;
+    if (textColorEl) textColorEl.value = textColor;
+    if (sizeValEl) sizeValEl.textContent = size + 'px';
+    this._posX = parseInt(localStorage.getItem('oc_sub_x') || '0', 10);
+    this._posY = parseInt(localStorage.getItem('oc_sub_y') || '0', 10);
+    const modeEl = document.getElementById('sub-mode-select');
+    if (modeEl) modeEl.value = localStorage.getItem('oc_sub_mode') || 'multiline';
+  },
+
+  loadAll() {
+    if (!appConfig) return;
+    for (const v of appConfig.videos) this._loadVideoSubs(v);
+  },
+
+  startTracking() {
+    clearInterval(this.trackInterval);
+    this.trackInterval = setInterval(() => {
+      const t = Video.getCurrentTime();
+      this.showCueAt(t);
+    }, 250);
+  },
+
+  showCueAt(t) {
+    if (!currentVideo || !this.enabled) return;
+    const vidCues = allSubtitleCues[currentVideo.id];
+    if (!vidCues) return;
+    const langCues = vidCues[currentSubLang] || Object.values(vidCues)[0];
+    if (!langCues) return;
+    const ov = document.getElementById('subtitle-overlay');
+    if (!ov) return;
+    const cue = langCues.find(c => t >= c.start && t <= c.end);
+    if (cue) {
+      const displayed = this._applyMode(cue.text);
+      const mode = localStorage.getItem('oc_sub_mode') || 'multiline';
+      if (mode === 'multiline') {
+        ov.innerHTML = displayed
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+      } else {
+        ov.textContent = displayed;
+      }
+      ov.style.display = '';
+    } else { ov.style.display = 'none'; }
+  },
+
+  search(q) {
+    clearTimeout(this.searchDebounce);
+    this.searchDebounce = setTimeout(() => this._doSearch(q), 200);
+  },
+
+  _doSearch(q) {
+    const container = document.getElementById('sub-results');
+    if (!q || q.length < 2) { container.innerHTML = ''; return; }
+    const lower = q.toLowerCase();
+    const results = [];
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    for (const [vidId, langMap] of Object.entries(allSubtitleCues)) {
+      const vidEntry = appConfig?.videos.find(v => v.id === vidId) || { title: vidId };
+      for (const [lang, cues] of Object.entries(langMap)) {
+        for (const cue of cues) {
+          if (cue.text.toLowerCase().includes(lower)) {
+            results.push({ vidId, vidTitle: vidEntry.title, lang, cue });
+            if (results.length >= 150) break;
+          }
+        }
+        if (results.length >= 150) break;
+      }
+      if (results.length >= 150) break;
+    }
+
+    if (results.length === 0) {
+      container.innerHTML = `<div style="color:#64748b;font-size:12px;padding:4px">No results found</div>`;
+      return;
+    }
+
+    container.innerHTML = results.map(r => {
+      const highlighted = r.cue.text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
+      const shortTitle = r.vidTitle.replace(/ELO 25 Basics Flows \(2026\)_?/i, '').substring(0, 22) || r.vidTitle.substring(0, 22);
+      return `<div class="sub-result-item" onclick="Sub.jumpTo('${r.vidId}','${r.lang}',${r.cue.start})">
+        <span class="ts">${fmt(r.cue.start)}</span>
+        <span class="vid-badge">${shortTitle}</span>
+        <span class="vid-badge" style="background:#1a2f3f;color:#7dd3fc;flex-shrink:0">${r.lang.toUpperCase()}</span>
+        <span>${highlighted}</span>
+      </div>`;
+    }).join('');
+  },
+
+  jumpTo(videoId, lang, time) {
+    if (lang) { currentSubLang = lang; this._updateLangSelector(); }
+    this.enabled = true;
+    const btn = document.getElementById('btn-sub-toggle');
+    if (btn) { btn.innerHTML = `<i data-lucide="captions" size="12"></i> Subtitles ON`; lucide.createIcons(); }
+
+    if (!currentVideo || currentVideo.id !== videoId) {
+      const allVideos = [...(appConfig?.videos || []), ...ExternalVideos.load()];
+      const entry = allVideos.find(v => v.id === videoId);
+      if (entry) {
+        Video._seekOnLoad = time;
+        Video._playAfterSeek = true;
+        Video.load(entry);
+      }
+    } else {
+      Video.seekTo(time);
+      Video.play();
+    }
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// MARKERS
+// ────────────────────────────────────────────────────────────
+const Markers = {
+  _lsKey(type, id) {
+    return id ? `oc_markers_${type}_${id}` : `oc_markers_${type}`;
+  },
+
+  _load(key) {
+    try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
+  },
+
+  _save(key, data) { localStorage.setItem(key, JSON.stringify(data)); },
+
+  // ── Video markers ──
+  addVideo() {
+    this._promptLabel('Add Video Marker', label => {
+      const t = Video.getCurrentTime();
+      const vidId = currentVideo?.id || 'unknown';
+      const key = this._lsKey('video', vidId);
+      const list = this._load(key);
+      list.push({ time: t, label, created: new Date().toISOString() });
+      this._save(key, list);
+      this.renderVideoMarkers();
+      toast('Video marker saved');
+      const body = document.getElementById('vmarkers-body');
+      if (body && body.style.display === 'none') toggleSection('vmarkers');
+    });
+  },
+
+  renderVideoMarkers() {
+    const el = document.getElementById('video-markers-list');
+    if (!el) return;
+    const vidId = currentVideo?.id || null;
+    if (!vidId) { el.innerHTML = ''; return; }
+    const list = this._load(this._lsKey('video', vidId));
+    if (!list.length) { el.innerHTML = `<div style="color:#64748b;font-size:12px">No markers yet</div>`; return; }
+    el.innerHTML = list.map((m, i) => `
+      <div class="marker-item" onclick="Video.seekTo(${m.time})">
+        <i data-lucide="play" size="11" style="color:#7c8cf8;flex-shrink:0"></i>
+        <span class="ts">${fmt(m.time)}</span>
+        <span class="lbl">${m.label || 'Marker ' + (i+1)}</span>
+        <span class="del-btn" onclick="event.stopPropagation();Markers.delVideo(${i})" title="Delete">
+          <i data-lucide="trash-2" size="11"></i>
+        </span>
+      </div>`).join('');
+    lucide.createIcons();
+  },
+
+  delVideo(i) {
+    const vidId = currentVideo?.id; if (!vidId) return;
+    const key = this._lsKey('video', vidId);
+    const list = this._load(key);
+    list.splice(i, 1); this._save(key, list); this.renderVideoMarkers();
+  },
+
+  exportVideo() {
+    const vidId = currentVideo?.id; if (!vidId) { toast('No video selected'); return; }
+    dl(`video_markers_${vidId}.json`, JSON.stringify(this._load(this._lsKey('video', vidId)), null, 2));
+  },
+
+  importVideo(input) {
+    const f = input.files[0]; if (!f) return;
+    const vidId = currentVideo?.id; if (!vidId) { toast('Load a video first'); return; }
+    const r = new FileReader();
+    r.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        this._save(this._lsKey('video', vidId), data);
+        this.renderVideoMarkers(); toast('Imported');
+      } catch { toast('Invalid JSON'); }
+    };
+    r.readAsText(f);
+    input.value = '';
+  },
+
+  // ── Reading markers ──
+  addReading() {
+    this._promptLabel('Add Reading Marker', label => {
+      const key = this._lsKey('reading', null);
+      const list = this._load(key);
+      const marker = { label, created: new Date().toISOString(), counter: list.length + 1 };
+      list.push(marker);
+      this._save(key, list);
+      this.renderReadingMarkers();
+      toast('Reading marker saved');
+    });
+  },
+
+  renderReadingMarkers() {
+    const el = document.getElementById('reading-markers-list');
+    if (!el) return;
+    const list = this._load(this._lsKey('reading', null));
+    if (!list.length) { el.innerHTML = `<div style="color:#64748b;font-size:12px">No markers yet</div>`; return; }
+    el.innerHTML = list.map((m, i) => `
+      <div class="marker-item">
+        <i data-lucide="map-pin" size="11" style="color:#7c8cf8;flex-shrink:0"></i>
+        <span class="ts">#${m.counter}</span>
+        <span class="lbl">${m.label || 'Position ' + m.counter}</span>
+        <span style="font-size:10px;color:#64748b;flex-shrink:0">${new Date(m.created).toLocaleDateString()}</span>
+        <span class="del-btn" onclick="Markers.delReading(${i})" title="Delete">
+          <i data-lucide="trash-2" size="11"></i>
+        </span>
+      </div>`).join('');
+    lucide.createIcons();
+  },
+
+  delReading(i) {
+    const key = this._lsKey('reading', null);
+    const list = this._load(key);
+    list.splice(i, 1); this._save(key, list); this.renderReadingMarkers();
+  },
+
+  exportReading() {
+    dl('reading_markers.json', JSON.stringify(this._load(this._lsKey('reading', null)), null, 2));
+  },
+
+  importReading(input) {
+    const f = input.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        this._save(this._lsKey('reading', null), data);
+        this.renderReadingMarkers(); toast('Imported');
+      } catch { toast('Invalid JSON'); }
+    };
+    r.readAsText(f);
+    input.value = '';
+  },
+
+  // ── Sync markers ──
+  addSync() {
+    this._promptLabel('Add Sync Bookmark (video + reading)', label => {
+      const key = 'oc_markers_sync';
+      const list = this._load(key);
+      const vidId = currentVideo?.id || null;
+      const vidTime = Video.getCurrentTime();
+      const readCount = this._load(this._lsKey('reading', null)).length;
+      list.push({ label, videoId: vidId, videoTime: vidTime, readingPosition: readCount, created: new Date().toISOString() });
+      this._save(key, list);
+      this.renderSyncMarkers();
+      toast('Sync bookmark saved');
+    });
+  },
+
+  renderSyncMarkers() {
+    const el = document.getElementById('sync-markers-list');
+    if (!el) return;
+    const list = this._load('oc_markers_sync');
+    if (!list.length) { el.innerHTML = `<div style="color:#64748b;font-size:12px">No sync bookmarks yet</div>`; return; }
+    el.innerHTML = list.map((m, i) => `
+      <div style="padding:6px 8px;border-radius:7px;background:#1e2947;border:1px solid transparent;margin-bottom:2px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <i data-lucide="link-2" size="11" style="color:#7c8cf8"></i>
+          <span style="font-size:12px;font-weight:600;flex:1">${m.label || 'Sync ' + (i+1)}</span>
+          <span style="font-size:10px;color:#64748b">${new Date(m.created).toLocaleDateString()}</span>
+          <span class="del-btn" onclick="Markers.delSync(${i})" title="Delete">
+            <i data-lucide="trash-2" size="11"></i>
+          </span>
+        </div>
+        <div class="sync-badge">
+          <div class="part" onclick="m.videoId&&Video.seekTo(${m.videoTime})" style="cursor:pointer">
+            <i data-lucide="play" size="10" style="color:#7c8cf8"></i>
+            <span style="color:#7c8cf8">${m.videoId ? fmt(m.videoTime) : 'n/a'}</span>
+          </div>
+          <div class="part">
+            <i data-lucide="map-pin" size="10" style="color:#f59e0b"></i>
+            <span style="color:#f59e0b">Reading #${m.readingPosition}</span>
+          </div>
+        </div>
+      </div>`).join('');
+    lucide.createIcons();
+  },
+
+  delSync(i) {
+    const list = this._load('oc_markers_sync');
+    list.splice(i, 1);
+    localStorage.setItem('oc_markers_sync', JSON.stringify(list));
+    this.renderSyncMarkers();
+  },
+
+  exportSync() {
+    dl('sync_markers.json', JSON.stringify(this._load('oc_markers_sync'), null, 2));
+  },
+
+  // ── Label prompt ──
+  _pendingCallback: null,
+  _promptLabel(title, cb) {
+    document.getElementById('marker-modal-title').textContent = title;
+    document.getElementById('marker-label-input').value = '';
+    document.getElementById('marker-modal').style.display = 'flex';
+    document.getElementById('marker-label-input').focus();
+    this._pendingCallback = cb;
+  }
+};
+
+function closeMarkerModal() {
+  document.getElementById('marker-modal').style.display = 'none';
+  Markers._pendingCallback = null;
+}
+
+function markerModalConfirm() {
+  const label = document.getElementById('marker-label-input').value.trim();
+  const cb = Markers._pendingCallback;
+  closeMarkerModal();
+  if (cb) cb(label);
+}
+
+document.getElementById('marker-label-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') markerModalConfirm();
+  if (e.key === 'Escape') closeMarkerModal();
+});
+
+function showReadingMarkers() {
+  Markers.renderReadingMarkers();
+  document.getElementById('reading-modal').style.display = 'flex';
+}
+function closeReadingMarkers() {
+  document.getElementById('reading-modal').style.display = 'none';
+}
+
+// ────────────────────────────────────────────────────────────
+// NOTES
+// ────────────────────────────────────────────────────────────
+const Notes = {
+  sizeState: 'collapsed',
+  currentTab: 'edit',
+
+  init() {
+    const saved = localStorage.getItem('oc_notes') || '';
+    document.getElementById('notes-editor').value = saved;
+    this.sizeState = localStorage.getItem('oc_notes_size') || 'collapsed';
+    this._applySize();
+  },
+
+  save() {
+    const val = document.getElementById('notes-editor').value;
+    localStorage.setItem('oc_notes', val);
+    const pbnEd = document.getElementById('panelb-notes-editor');
+    if (pbnEd && pbnEd.value !== val) pbnEd.value = val;
+    if (this.currentTab === 'preview') this._renderPreview();
+  },
+
+  setTab(tab) {
+    this.currentTab = tab;
+    document.querySelectorAll('.notes-tab').forEach((b, i) => {
+      b.classList.toggle('active', (i === 0 && tab === 'edit') || (i === 1 && tab === 'preview'));
+    });
+    const editor = document.getElementById('notes-editor');
+    const preview = document.getElementById('notes-preview');
+    editor.style.display = tab === 'edit' ? '' : 'none';
+    preview.style.display = tab === 'preview' ? '' : 'none';
+    if (tab === 'preview') this._renderPreview();
+  },
+
+  _renderPreview() {
+    const md = document.getElementById('notes-editor').value;
+    const html = DOMPurify.sanitize(marked.parse(md), {
+      ADD_ATTR: ['target', 'rel'],
+    });
+    const preview = document.getElementById('notes-preview');
+    preview.innerHTML = html;
+    // Make links open in new tab
+    preview.querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+    // Make task checkboxes interactive
+    preview.querySelectorAll('input[type=checkbox]').forEach((cb, i) => {
+      cb.addEventListener('change', () => this._toggleTask(i, cb.checked));
+    });
+    lucide.createIcons();
+  },
+
+  _toggleTask(idx, checked) {
+    const editor = document.getElementById('notes-editor');
+    let md = editor.value;
+    let count = 0;
+    md = md.replace(/- \[(x| )\]/g, match => {
+      if (count++ === idx) return checked ? '- [x]' : '- [ ]';
+      return match;
+    });
+    editor.value = md;
+    this.save();
+  },
+
+  cycleSize() {
+    const states = ['collapsed', 'normal', 'fullscreen'];
+    const idx = states.indexOf(this.sizeState);
+    this.sizeState = states[(idx + 1) % states.length];
+    this._applySize();
+    localStorage.setItem('oc_notes_size', this.sizeState);
+  },
+
+  _applySize() {
+    const panel = document.getElementById('notes-panel');
+    panel.className = this.sizeState;
+    const chevron = document.getElementById('notes-chevron');
+    if (chevron) {
+      const icons = { collapsed: 'chevron-up', normal: 'chevron-down', fullscreen: 'chevron-down' };
+      chevron.setAttribute('data-lucide', icons[this.sizeState]);
+      lucide.createIcons();
+    }
+    const content = document.getElementById('notes-content');
+    content.style.display = this.sizeState === 'collapsed' ? 'none' : '';
+  },
+
+  exportMd() {
+    const content = document.getElementById('notes-editor').value;
+    const date = new Date().toISOString().slice(0, 10);
+    dl(`notes-${date}.md`, content, 'text/markdown');
+  },
+
+  importMd(input) {
+    const f = input.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = e => {
+      document.getElementById('notes-editor').value = e.target.result;
+      this.save();
+      toast('Notes imported');
+    };
+    r.readAsText(f);
+    input.value = '';
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// IO (export/import all)
+// ────────────────────────────────────────────────────────────
+const IO = {
+  exportAll() {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.startsWith('oc_')) {
+        try { data[key] = JSON.parse(localStorage.getItem(key)); }
+        catch { data[key] = localStorage.getItem(key); }
+      }
+    }
+    dl(`open_course_data_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(data, null, 2));
+  },
+
+  importAll() {
+    document.getElementById('import-all-input').click();
+  },
+
+  doImportAll(input) {
+    const f = input.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        for (const [k, v] of Object.entries(data)) {
+          if (k.startsWith('oc_')) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v));
+        }
+        toast('All data imported — reloading…');
+        setTimeout(() => location.reload(), 1200);
+      } catch { toast('Invalid file'); }
+    };
+    r.readAsText(f);
+    input.value = '';
+  }
+};
+
+// ────────────────────────────────────────────────────────────
+// COLLAPSIBLE SECTIONS
+// ────────────────────────────────────────────────────────────
+function _sectionOpenDisplay(body) {
+  return body.style.flexDirection ? 'flex' : '';
+}
+
+function toggleSection(id) {
+  const body = document.getElementById(id + '-body');
+  const icon = document.getElementById(id + '-icon');
+  if (!body) return;
+  const opening = body.style.display === 'none';
+  body.style.display = opening ? _sectionOpenDisplay(body) : 'none';
+  if (icon) { icon.setAttribute('data-lucide', opening ? 'chevron-down' : 'chevron-right'); lucide.createIcons(); }
+  const hdr = body.previousElementSibling;
+  if (hdr) hdr.style.borderBottomColor = opening ? '#2d3154' : 'transparent';
+  localStorage.setItem('oc_sec_' + id, opening ? '1' : '0');
+}
+
+function initSection(id, defaultOpen = false) {
+  const saved = localStorage.getItem('oc_sec_' + id);
+  const open = saved !== null ? saved === '1' : defaultOpen;
+  const body = document.getElementById(id + '-body');
+  const icon = document.getElementById(id + '-icon');
+  if (body) body.style.display = open ? _sectionOpenDisplay(body) : 'none';
+  const hdr = body?.previousElementSibling;
+  if (hdr) hdr.style.borderBottomColor = open ? '#2d3154' : 'transparent';
+  if (icon) icon.setAttribute('data-lucide', open ? 'chevron-down' : 'chevron-right');
+}
+
+// ────────────────────────────────────────────────────────────
+// COURSE FRAME
+// ────────────────────────────────────────────────────────────
+async function loadCourseFrame(frame) {
+  if (!appConfig) return;
+  const raw = appConfig.courseUrl;
+  const pw  = appConfig.coursePassword || 'Handout4EFB';
+
+  const pwEl = document.getElementById('pw-display');
+  if (pwEl) pwEl.textContent = pw;
+
+  const onLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  if (onLocalhost) {
+    // Probe proxy: strip hash (browsers don't send it to server anyway)
+    const artPathNoHash = raw.replace(/^https:\/\/share\.articulate\.com/, '').split('#')[0];
+    const probeUrl = '/proxy' + artPathNoHash;
+    let proxyOk = false;
+    try {
+      const r = await fetch(probeUrl, { method: 'HEAD', cache: 'no-store' });
+      proxyOk = r.ok;
+    } catch { /* proxy not running */ }
+
+    if (proxyOk) {
+      // Full URL including hash for client-side router
+      const artPath = raw.replace(/^https:\/\/share\.articulate\.com/, '');
+      frame.src = '/proxy' + artPath;
+      frame.style.visibility = '';
+      const errEl = document.getElementById('proxy-error');
+      if (errEl) errEl.remove();
+    } else {
+      _showProxyError(frame, pw, raw);
+    }
+  } else {
+    // Not on localhost — show direct URL with password helper bar only
+    _showProxyError(frame, pw, raw);
+  }
+}
+
+function _showProxyError(frame, pw, url) {
+  frame.style.visibility = 'hidden';
+  const wrap = document.getElementById('reader-frames-container');
+  if (!wrap || document.getElementById('proxy-error')) return;
+  const div = document.createElement('div');
+  div.id = 'proxy-error';
+  div.innerHTML = `
+    <i data-lucide="server-off" size="44" style="opacity:.35"></i>
+    <div>
+      <div style="font-weight:700;color:#f87171;font-size:14px;margin-bottom:8px">Proxy server not running</div>
+      <div style="font-size:12px;margin-bottom:10px">Run the launcher to enable the in-app course view:</div>
+      <code style="display:block;background:#0f1117;padding:8px 14px;border-radius:7px;font-size:12px;border:1px solid #2d3154;margin-bottom:12px">
+        Windows: <b>start.bat</b><br>
+        Mac/Linux: <b>bash start.sh</b>
+      </code>
+      <div style="font-size:11px;color:#64748b;margin-bottom:10px">Or open the course in a new browser tab:</div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="copyPw()" style="font-size:12px">
+          <i data-lucide="copy" size="12"></i> Copy Password (${pw})
+        </button>
+        <a href="${url}" target="_blank" rel="noopener" class="btn btn-primary" style="font-size:12px;text-decoration:none">
+          <i data-lucide="external-link" size="12"></i> Open Course Viewer
+        </a>
+      </div>
+    </div>`;
+  wrap.appendChild(div);
+  lucide.createIcons();
+}
+
+// ────────────────────────────────────────────────────────────
+// VIDEO HEIGHT RESIZE
+// ────────────────────────────────────────────────────────────
+function initVideoResize() {
+  const handle  = document.getElementById('video-resize-handle');
+  const wrapper = document.getElementById('video-wrapper');
+  if (!handle || !wrapper) return;
+
+  // Restore saved height
+  const saved = localStorage.getItem('oc_video_h');
+  if (saved) { wrapper.style.height = saved; }
+
+  let dragging = false, startY, startH;
+
+  handle.addEventListener('mousedown', e => {
+    dragging = true;
+    startY = e.clientY;
+    startH = wrapper.getBoundingClientRect().height;
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    // Overlay to prevent iframe event theft
+    const ov = document.createElement('div');
+    ov.id = 'vresize-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:row-resize';
+    document.body.appendChild(ov);
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const newH = Math.max(80, Math.min(800, startH + (e.clientY - startY)));
+    wrapper.style.height = newH + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    document.getElementById('vresize-overlay')?.remove();
+    localStorage.setItem('oc_video_h', wrapper.style.height);
+  });
+}
+
+function copyPw() {
+  const pw = appConfig?.coursePassword || document.getElementById('pw-display')?.textContent || '';
+  navigator.clipboard.writeText(pw).then(() => toast('Password copied!'));
+}
+
+// ────────────────────────────────────────────────────────────
+// EXTERNAL VIDEOS (persistent user-added videos)
+// ────────────────────────────────────────────────────────────
+const ExternalVideos = {
+  _key: 'oc_external_videos',
+
+  load() {
+    try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch { return []; }
+  },
+
+  save(list) { localStorage.setItem(this._key, JSON.stringify(list)); },
+
+  openAdd() {
+    document.getElementById('ext-video-modal').style.display = 'flex';
+    document.getElementById('ext-video-url').value = '';
+    document.getElementById('ext-video-title').value = '';
+    setTimeout(() => document.getElementById('ext-video-url').focus(), 50);
+  },
+
+  confirmAdd() {
+    const url = document.getElementById('ext-video-url').value.trim();
+    const title = document.getElementById('ext-video-title').value.trim();
+    if (!url) { toast('Enter a URL'); return; }
+    const ytId = extractYtId(url);
+    const list = this.load();
+    const id = (ytId ? 'yt_ext_' + ytId : 'ext_vid') + '_' + Date.now();
+    list.push({
+      id,
+      title: title || (ytId ? 'YouTube: ' + ytId : url.substring(0, 60)),
+      youtubeId: ytId || null,
+      externalUrl: ytId ? null : url,
+      localFile: null,
+      subtitleFile: null,
+      _external: true
+    });
+    this.save(list);
+    renderFileList();
+    closeExtVideoModal();
+    toast('Video added to list');
+  },
+
+  delete(id) {
+    const list = this.load().filter(v => v.id !== id);
+    this.save(list);
+    renderFileList();
+    toast('Removed');
+  },
+
+  _addIfNew(videoEntry) {
+    const configIds = (appConfig?.videos || []).map(v => v.id);
+    const extIds = this.load().map(v => v.id);
+    if (configIds.includes(videoEntry.id) || extIds.includes(videoEntry.id)) return;
+    const list = this.load();
+    list.push({ ...videoEntry, _external: true });
+    this.save(list);
+    renderFileList();
+  }
+};
+
+function closeExtVideoModal() {
+  document.getElementById('ext-video-modal').style.display = 'none';
+}
+
+// ────────────────────────────────────────────────────────────
+// IMAGE VIEWER
+// ────────────────────────────────────────────────────────────
+const ImageViewer = {
+  open(src) {
+    const modal = document.getElementById('image-viewer-modal');
+    const img = document.getElementById('image-viewer-img');
+    if (!modal || !img) return;
+    img.src = src;
+    modal.style.display = 'flex';
+  },
+  close() {
+    const modal = document.getElementById('image-viewer-modal');
+    if (modal) modal.style.display = 'none';
+  }
+};
+
+async function saveConfig() {
+  const extVideos = ExternalVideos.load().map(v => { const c = {...v}; delete c._external; return c; });
+  const mergedVideos = [...(appConfig.videos || []), ...extVideos];
+  const cfg = {
+    courseUrl: appConfig.courseUrl || '',
+    coursePassword: appConfig.coursePassword || '',
+    videos: mergedVideos
+  };
+  try {
+    const r = await fetch('/save-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) });
+    if (r.ok) {
+      appConfig.videos = mergedVideos;
+      ExternalVideos.save([]);
+      renderFileList();
+      toast('Configuration saved to config.json');
+    } else {
+      toast('Save failed — check proxy is running');
+    }
+  } catch {
+    toast('Save failed — is the proxy running?');
+  }
+}
+
+function closeLocalVideoModal() {
+  document.getElementById('local-video-modal').style.display = 'none';
+}
+
+// ────────────────────────────────────────────────────────────
+// FILE LIST
+// ────────────────────────────────────────────────────────────
+function renderFileList() {
+  const el = document.getElementById('file-list');
+  if (!el || !appConfig) return;
+  const extVideos = ExternalVideos.load();
+  const allVideos = [...appConfig.videos, ...extVideos];
+  el.innerHTML = allVideos.map(v => {
+    const label = v.localFile ? 'Local' : (v.externalUrl ? 'URL' : 'YouTube');
+    const icon = v.localFile ? 'file-video' : (v.externalUrl ? 'globe' : 'tv-2');
+    const safeV = JSON.stringify(v).replace(/"/g, '&quot;');
+    const delBtn = v._external
+      ? `<span onclick="event.stopPropagation();ExternalVideos.delete('${v.id}')" style="color:#64748b;cursor:pointer;flex-shrink:0;padding:2px" title="Remove"><i data-lucide="x" size="10"></i></span>`
+      : '';
+    return `<div class="file-item" data-id="${v.id}" onclick="Video.load(${safeV})">
+      <i data-lucide="${icon}" size="14" style="color:#7c8cf8;flex-shrink:0"></i>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.title}</span>
+      <span style="font-size:10px;color:#64748b">${label}</span>
+      ${delBtn}
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+// ────────────────────────────────────────────────────────────
+// INIT
+// ────────────────────────────────────────────────────────────
+async function init() {
+  Theme.init();
+  Layout.init();
+  Notes.init();
+  initVideoResize();
+
+  // Load config
+  try {
+    const r = await fetch('config.json');
+    appConfig = await r.json();
+  } catch {
+    // Fallback: inline defaults (so app works without HTTP server for basic UI)
+    appConfig = {
+      courseUrl: 'https://share.articulate.com/Mxh2Afx4Mh-Kh6xYmwuyv#/lessons/xCVlouFik9XCSuKDTsQ6Jk7jxW1h-N5c',
+      coursePassword: 'Handout4EFB',
+      videos: []
+    };
+  }
+
+  // Render file list
+  renderFileList();
+
+  // Auto-open last watched video, or first in list
+  {
+    const allVids = [...(appConfig.videos || []), ...ExternalVideos.load()];
+    if (allVids.length > 0) {
+      const lastId = localStorage.getItem('oc_last_video_id');
+      const toLoad = allVids.find(v => v.id === lastId) || allVids[0];
+      Video.load(toLoad);
+    }
+  }
+
+  // Start loading all subtitles in background so search works before user clicks a video
+  Sub.loadAll();
+  Sub._initStyleControls();
+
+  // Render markers
+  Markers.renderVideoMarkers();
+  Markers.renderSyncMarkers();
+
+  // Init collapsible sections
+  initSection('subtitles', true);
+  initSection('files',     true);
+  initSection('vmarkers',  true);
+  initSection('sync',      false);
+
+  // Init Panel B (URL link, mode, minimize state)
+  PanelA.init();
+  PanelB.init();
+  ReaderZoom.init();
+  TabManager.init();
+
+  // Auto-open local files when no course URL (and no saved custom tabs from localStorage)
+  if (!appConfig.courseUrl) {
+    const hasContent = TabManager.tabs.some(t => t.type !== 'course');
+    if (!hasContent) {
+      try {
+        const r = await fetch('/list-local-files');
+        if (r.ok) {
+          const { docs = [], images = [] } = await r.json();
+          for (const doc of docs) {
+            const title = doc.length > 22 ? doc.substring(0, 20) + '…' : doc;
+            TabManager.openTab(doc, title, 'custom');
+          }
+          if (images.length > 0) TabManager.openImageViewer(images);
+        }
+      } catch { /* proxy not running or no local files */ }
+    }
+  }
+
+  lucide.createIcons();
+}
+
+// Modal keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeYtModal();
+    closeMarkerModal();
+    closeReadingMarkers();
+    closeLocalVideoModal();
+    closeExtVideoModal();
+    ImageViewer.close();
+  }
+});
+
+// Close modals on backdrop click
+document.getElementById('reading-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('reading-modal')) closeReadingMarkers();
+});
+document.getElementById('yt-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('yt-modal')) closeYtModal();
+});
+document.getElementById('marker-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('marker-modal')) closeMarkerModal();
+});
+document.getElementById('local-video-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('local-video-modal')) closeLocalVideoModal();
+});
+document.getElementById('ext-video-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('ext-video-modal')) closeExtVideoModal();
+});
+document.getElementById('image-viewer-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('image-viewer-modal')) ImageViewer.close();
+});
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
