@@ -57,12 +57,12 @@
   .hdr-sep { width: 1px; height: 24px; background: #2d3154; margin: 0 4px; flex-shrink: 0; }
 
   #dir-selector {
-    background: #1a1d2e; color: #a5b4fc; border: 1px solid #2d3154;
-    border-radius: 6px; padding: 2px 6px; font-size: 11px; max-width: 180px;
+    background: #0f1117; color: #a5b4fc; border: 1px solid #3b4fd8;
+    border-radius: 6px; padding: 2px 8px; font-size: 11px; max-width: 200px;
     cursor: pointer; outline: none; height: 26px; flex-shrink: 0;
   }
-  #dir-selector:hover { border-color: #3b4fd8; }
-  html.light #dir-selector { background: #1e293b; color: #818cf8; border-color: #334155; }
+  #dir-selector:hover { border-color: #7c8cf8; color: #e2e8f0; }
+  html.light #dir-selector { background: #0f172a; color: #818cf8; border-color: #3b82f6; }
 
   #app-title {
     font-weight: 700; font-size: 15px; color: #7c8cf8; letter-spacing: -.3px;
@@ -2740,15 +2740,22 @@ const Sessions = {
     const sep = document.getElementById('dir-selector-sep');
     if (!el) return;
     const auto = this._all().filter(s => s.auto);
-    if (auto.length === 0) {
+    const currentId = appConfig?._dirId ? `auto_${appConfig._dirId}` : null;
+    // Build current-dir entry even if not yet in sessions (first load)
+    const currentName = appConfig?._dirName ? `📁 ${appConfig._dirName}` : null;
+    if (auto.length === 0 && !currentName) {
       el.style.display = 'none';
       if (sep) sep.style.display = 'none';
       return;
     }
-    el.style.display = '';
+    el.style.display = 'inline-block';
     if (sep) sep.style.display = '';
-    const currentId = appConfig?._dirId ? `auto_${appConfig._dirId}` : null;
-    el.innerHTML = auto.map(s =>
+    // If current dir not yet in list, prepend it
+    let entries = [...auto];
+    if (currentId && !entries.find(s => s.id === currentId) && currentName) {
+      entries.unshift({ id: currentId, name: currentName });
+    }
+    el.innerHTML = entries.map(s =>
       `<option value="${s.id}"${s.id === currentId ? ' selected' : ''}>${s.name}</option>`
     ).join('');
   },
