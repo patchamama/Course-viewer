@@ -670,7 +670,7 @@
       <!-- Course Sessions -->
       <div class="card" style="padding:0">
         <!-- Nearby Courses browser -->
-        <div class="card" style="padding:0" id="nearby-courses-card" style="display:none">
+        <div class="card" id="nearby-courses-card" style="padding:0;display:none">
           <div class="section-header" onclick="toggleSection('nearby')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
             <i data-lucide="folder-tree" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
             <span class="section-label" style="margin:0;flex:1">Nearby Courses</span>
@@ -3041,6 +3041,8 @@ const DirectoryPicker = {
 // DIRECTORY BROWSER
 // ────────────────────────────────────────────────────────────
 const NearbyBrowser = {
+  _entries: [],
+
   async load() {
     const card = document.getElementById('nearby-courses-card');
     const tree = document.getElementById('nearby-tree');
@@ -3050,24 +3052,36 @@ const NearbyBrowser = {
       if (!r.ok) return;
       const data = await r.json();
       const all = [
-        ...(data.parent && (data.parent.hasConfig) ? [{ ...data.parent, _level: 0, _rel: '↑ parent' }] : []),
-        ...data.siblings.map(s => ({ ...s, _level: 0, _rel: '↕ sibling' })),
-        ...data.children.map(c => ({ ...c, _level: 1, _rel: '↳ child' })),
+        ...(data.parent?.hasConfig ? [{ ...data.parent, _level: 0 }] : []),
+        ...data.siblings.map(s => ({ ...s, _level: 0 })),
+        ...data.children.map(c => ({ ...c, _level: 1 })),
       ];
       if (!all.length) { if (card) card.style.display = 'none'; return; }
+      this._entries = all;
       if (card) card.style.display = '';
-      tree.innerHTML = all.map(e => {
+      tree.innerHTML = all.map((e, i) => {
         const indent = e._level ? 'padding-left:14px' : '';
-        const cfg = e.hasConfig ? '' : ' style="opacity:.55"';
-        return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-radius:4px;${indent}">
-          <span${cfg} style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.path}">
+        const dim = e.hasConfig ? '' : 'opacity:.55;';
+        return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;${indent}">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${dim}" title="${e.path.replace(/"/g,'&quot;')}">
             ${e._level ? '📂' : '📁'} ${e.name}
           </span>
-          <button onclick="NearbyBrowser.switchTo(${JSON.stringify(e.path)})"
+          <button data-idx="${i}"
             style="flex-shrink:0;font-size:10px;padding:1px 6px;background:#3b4fd8;color:#fff;border:none;border-radius:4px;cursor:pointer"
             title="Switch to this course">Open</button>
         </div>`;
       }).join('');
+      // wire up buttons via event delegation (avoids inline onclick quoting issues)
+      tree.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-idx]');
+        if (!btn) return;
+        NearbyBrowser.switchTo(NearbyBrowser._entries[+btn.dataset.idx].path);
+      }, { once: true });
+      // open section automatically on first load if not previously collapsed
+      const body = document.getElementById('nearby-body');
+      if (body && body.style.display === 'none' && !localStorage.getItem('oc_sec_nearby')) {
+        toggleSection('nearby');
+      }
     } catch { /* no backend */ }
   },
 
