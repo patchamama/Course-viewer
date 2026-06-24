@@ -1216,8 +1216,12 @@ const TabManager = {
     this._storageKey = `oc_reader_tabs_${appConfig._dirId || 'default'}`;
     const saved = this._loadFromStorage();
     if (saved && saved.tabs && saved.tabs.length > 0) {
-      this.tabs = saved.tabs;
-      this.activeId = saved.tabs.find(t => t.id === saved.activeId) ? saved.activeId : saved.tabs[0].id;
+      // Migrate pre-markdown-rendering custom tabs
+      this.tabs = saved.tabs.map(t =>
+        (t.type === 'custom' && /\.md$/i.test((t.url || '').split('?')[0]))
+          ? { ...t, type: 'markdown' } : t
+      );
+      this.activeId = this.tabs.find(t => t.id === saved.activeId) ? saved.activeId : this.tabs[0].id;
     } else {
       const courseUrl = appConfig.courseUrl || '';
       this.tabs = [{ id: 'course', title: 'Course', url: courseUrl, type: 'course', scrollY: 0 }];
@@ -1241,7 +1245,7 @@ const TabManager = {
     for (const tab of this.tabs) {
       if (tab.type === 'image-viewer') this._createImageViewerFrame(tab);
       else if (tab.type === 'dir-browser') { /* DirBrowser creates its own element */ }
-      else if (tab.type === 'markdown') this._createMarkdownFrame(tab);
+      else if (tab.type === 'markdown' || /\.md$/i.test((tab.url || '').split('?')[0])) this._createMarkdownFrame(tab);
       else this._createFrame(tab);
     }
   },
