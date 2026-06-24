@@ -95,10 +95,20 @@ jobs:
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $TAG = $env:GITHUB_REF_NAME -replace '^v', ''
           $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
           $EXE_ABS = (Resolve-Path "dist\course-viewer.exe").Path
           & $makensis "/DEXE_PATH=$EXE_ABS" "/DVERSION=$TAG" nsis\installer.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # makensis writes OutFile relative to the script dir (nsis/) — move to root
+          $setup = Get-ChildItem -Path nsis, . -Filter "*_setup.exe" | Select-Object -First 1
+          if ($setup) {
+            Move-Item $setup.FullName "course-viewer_${TAG}_windows_setup.exe" -Force
+            Write-Host "Installer: course-viewer_${TAG}_windows_setup.exe"
+          } else {
+            Write-Error "Setup installer not found after makensis"
+          }
           Copy-Item dist\course-viewer.exe "course-viewer_${TAG}_windows_portable.exe"
 
       # ── Upload build artifacts ──────────────────────────────────────────────
