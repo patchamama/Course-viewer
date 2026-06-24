@@ -3451,9 +3451,26 @@ async function init() {
     }
   } catch { /* no backend */ }
 
+  // If ?dirId=X is present (set by the desktop app), the server may have just
+  // switched directories. Re-fetch config if the dirId doesn't match yet.
+  const _urlParams = new URLSearchParams(window.location.search);
+  const _expectedDirId = _urlParams.get('dirId');
+  if (_expectedDirId && _hasBackend && appConfig._dirId !== _expectedDirId) {
+    await new Promise(r => setTimeout(r, 350));
+    try {
+      const r2 = await fetch('course-viewer.config.json?_=' + Date.now());
+      if (r2.ok) { appConfig = await r2.json(); _hasBackend = !!appConfig._dirId; }
+    } catch {}
+  }
+  // Clean ?dirId and ?_t from the address bar without triggering a reload
+  if (_expectedDirId) {
+    const clean = window.location.pathname;
+    history.replaceState(null, '', clean);
+  }
+
   // Check URL params for shared config (?c=BASE64)
   try {
-    const sharedParam = new URLSearchParams(window.location.search).get('c');
+    const sharedParam = _urlParams.get('c');
     if (sharedParam) {
       const shared = JSON.parse(decodeURIComponent(atob(sharedParam)));
       appConfig = Object.assign({ courseUrl:'', coursePassword:'', videos:[] }, shared);

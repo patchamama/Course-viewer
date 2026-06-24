@@ -4,10 +4,14 @@ Course Viewer — desktop entry point.
 Wraps proxy.py in a background thread and manages a system tray icon.
 Usage: course-viewer [<folder-path>]
 """
+import hashlib
+import json
 import os
+import socket
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
 
 import pystray
@@ -16,18 +20,16 @@ from PIL import Image, ImageDraw
 import proxy
 import updater
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.8"
 
 
 def _app_dir():
-    """Directory where the executable (or this script) lives."""
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
 
 def _static_dir():
-    """Course folder: first CLI arg (if valid dir) else app dir."""
     if len(sys.argv) > 1:
         candidate = os.path.normpath(sys.argv[1])
         if os.path.isdir(candidate):
@@ -35,14 +37,38 @@ def _static_dir():
     return _app_dir()
 
 
+def _dir_id(path):
+    """Same hash as proxy.py: first 8 hex chars of MD5(path)."""
+    return hashlib.md5(path.encode()).hexdigest()[:8]
+
+
+def _port_open(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _switch_dir(port, new_path):
+    """POST /api/switch-dir to an already-running server."""
+    try:
+        data = json.dumps({"path": new_path}).encode()
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/switch-dir",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=3)
+        return True
+    except Exception:
+        return False
+
+
 def _make_icon():
-    """Generate a simple tray icon with Pillow (no external file needed)."""
     size = 64
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    # Rounded square background
     d.rounded_rectangle([2, 2, size - 2, size - 2], radius=12, fill=(30, 41, 84, 255))
-    # Play triangle
     margin = 18
     d.polygon(
         [(margin, margin), (margin, size - margin), (size - margin, size // 2)],
@@ -52,8 +78,6 @@ def _make_icon():
 
 
 def _load_icon(app_dir):
-    """Load icon from assets/, falling back to generated icon."""
-    # In a PyInstaller onefile build, bundled files are in sys._MEIPASS
     bundle_dir = getattr(sys, "_MEIPASS", app_dir)
     icon_path = os.path.join(bundle_dir, "assets", "icon.png")
     if os.path.isfile(icon_path):
@@ -64,27 +88,40 @@ def _load_icon(app_dir):
     return _make_icon()
 
 
+def _browser_url(port, dir_id):
+    """Unique URL per invocation so the browser always opens a fresh tab."""
+    return f"http://127.0.0.1:{port}/?dirId={dir_id}&_t={int(time.time())}"
+
+
 def main():
     app_dir = _app_dir()
     static_dir = _static_dir()
+    port = proxy.PORT
+    dir_id = _dir_id(static_dir)
 
-    # Point proxy globals to the right directories before the server starts
+    if _port_open(port):
+        # Another instance is already running — just switch its directory and
+        # open a new browser tab. No second tray or server needed.
+        _switch_dir(port, static_dir)
+        time.sleep(0.25)  # give switch-dir time to complete before browser loads
+        webbrowser.open(_browser_url(port, dir_id))
+        return
+
+    # ── Fresh start ──────────────────────────────────────────────────────────
     bundle_dir = getattr(sys, "_MEIPASS", app_dir)
     proxy.APP_DIR = bundle_dir
     proxy.STATIC_DIR = static_dir
 
-    # Start HTTP server in a daemon thread
     server_thread = threading.Thread(target=proxy.run, daemon=True)
     server_thread.start()
-    time.sleep(0.4)  # let the server bind before opening browser
+    time.sleep(0.4)
 
-    url = f"http://localhost:{proxy.PORT}/"
-    webbrowser.open(url)
+    webbrowser.open(_browser_url(port, dir_id))
 
     icon_image = _load_icon(app_dir)
 
     def on_open(icon, item):
-        webbrowser.open(url)
+        webbrowser.open(_browser_url(port, _dir_id(proxy.STATIC_DIR)))
 
     def on_check_updates(icon, item):
         tag, release_url, has_update = updater.check(APP_VERSION)
@@ -109,7 +146,6 @@ def main():
         menu,
     )
 
-    # Check for updates in the background after startup
     def _bg_update_check():
         time.sleep(6)
         tag, release_url, has_update = updater.check(APP_VERSION)
@@ -118,7 +154,7 @@ def main():
 
     threading.Thread(target=_bg_update_check, daemon=True).start()
 
-    tray.run()  # blocks main thread — required on macOS
+    tray.run()
 
 
 if __name__ == "__main__":
