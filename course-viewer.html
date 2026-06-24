@@ -3411,6 +3411,7 @@ function renderFileList() {
   const allVideos = [...appConfig.videos, ...extVideos];
   // Panel visibility controlled via CSS .has-videos class — immune to any JS style override
   const _hasV = allVideos.length > 0;
+  console.log('[panel-videos] videos:', appConfig?.videos?.length, 'ext:', ExternalVideos.load().length, 'hasV:', _hasV);
   document.getElementById('panel-a')?.classList.toggle('has-videos', _hasV);
   const _i = document.getElementById('files-icon');
   const _h = document.getElementById('files-body')?.previousElementSibling;
