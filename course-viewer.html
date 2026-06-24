@@ -3405,15 +3405,14 @@ function renderFileList() {
   if (!el || !appConfig) return;
   const extVideos = ExternalVideos.load();
   const allVideos = [...appConfig.videos, ...extVideos];
-  // Auto-collapse on session/dir switches — bypass localStorage via toggleSection
-  if (allVideos.length === 0) {
-    const _b = document.getElementById('files-body');
-    const _i = document.getElementById('files-icon');
-    if (_b) _b.style.display = 'none';
-    if (_i) _i.setAttribute('data-lucide', 'chevron-right');
-    const _h = _b?.previousElementSibling;
-    if (_h) _h.style.borderBottomColor = 'transparent';
-  }
+  // Panel state driven by content — always set regardless of localStorage
+  const _hasV = allVideos.length > 0;
+  const _b = document.getElementById('files-body');
+  const _i = document.getElementById('files-icon');
+  const _h = _b?.previousElementSibling;
+  if (_b) _b.style.display = _hasV ? 'flex' : 'none';
+  if (_i) _i.setAttribute('data-lucide', _hasV ? 'chevron-down' : 'chevron-right');
+  if (_h) _h.style.borderBottomColor = _hasV ? '#2d3154' : 'transparent';
   el.innerHTML = allVideos.map(v => {
     const label = v.localFile ? 'Local' : (v.externalUrl ? 'URL' : 'YouTube');
     const icon = v.localFile ? 'file-video' : (v.externalUrl ? 'globe' : 'tv-2');
@@ -3517,7 +3516,6 @@ async function init() {
 
   // Init collapsible sections
   initSection('subtitles', true);
-  initSection('files',     false);
   initSection('vmarkers',  true);
   initSection('sync',      false);
 
@@ -3604,18 +3602,6 @@ async function init() {
     requestAnimationFrame(() => { document.body.style.zoom = '0.8'; });
   });
 
-  // Set video panel state based on content — always overrides localStorage preference.
-  // Runs after all init code so nothing can change it after this point.
-  setTimeout(() => {
-    const _hasV = (appConfig.videos?.length || 0) + ExternalVideos.load().length > 0;
-    const _b = document.getElementById('files-body');
-    const _i = document.getElementById('files-icon');
-    const _h = _b?.previousElementSibling;
-    if (_b) _b.style.display = _hasV ? 'flex' : 'none';
-    if (_i) _i.setAttribute('data-lucide', _hasV ? 'chevron-down' : 'chevron-right');
-    if (_h) _h.style.borderBottomColor = _hasV ? '' : 'transparent';
-    lucide.createIcons();
-  }, 0);
 }
 
 // Modal keyboard shortcuts
