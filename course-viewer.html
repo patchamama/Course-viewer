@@ -3377,17 +3377,10 @@ function renderFileList() {
   if (!el || !appConfig) return;
   const extVideos = ExternalVideos.load();
   const allVideos = [...appConfig.videos, ...extVideos];
+  // Auto-collapse on session/dir switches (init() handles the initial page load)
   const body = document.getElementById('files-body');
-  if (body) {
-    const hasVideos = allVideos.length > 0;
-    const userPref  = localStorage.getItem('oc_sec_files');
-    // Auto-collapse when no videos and user hasn't explicitly opened this session
-    if (!hasVideos && userPref !== '1') {
-      if (body.style.display !== 'none') toggleSection('files');
-    } else if (hasVideos && userPref === null) {
-      // Auto-open when videos appear and user has no saved preference yet
-      if (body.style.display === 'none') toggleSection('files');
-    }
+  if (body && allVideos.length === 0 && body.style.display !== 'none') {
+    toggleSection('files');
   }
   el.innerHTML = allVideos.map(v => {
     const label = v.localFile ? 'Local' : (v.externalUrl ? 'URL' : 'YouTube');
@@ -3490,11 +3483,15 @@ async function init() {
   Markers.renderVideoMarkers();
   Markers.renderSyncMarkers();
 
-  // Init collapsible sections
-  initSection('subtitles', true);
-  initSection('files',     true);
-  initSection('vmarkers',  true);
-  initSection('sync',      false);
+  // Init collapsible sections — video panel default depends on whether there are videos
+  {
+    const _extV = ExternalVideos.load();
+    const _hasV = (appConfig.videos?.length || 0) + _extV.length > 0;
+    initSection('subtitles', true);
+    initSection('files',     _hasV);   // collapsed when no videos, open when there are
+    initSection('vmarkers',  true);
+    initSection('sync',      false);
+  }
 
   // Init Panel B (URL link, mode, minimize state)
   PanelA.init();
