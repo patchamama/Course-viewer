@@ -2599,10 +2599,10 @@ async function loadCourseFrame(frame) {
   if (pwBar) pwBar.style.display = pw ? '' : 'none';
 
   const onLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  if (onLocalhost) {
+  if (onLocalhost && raw) {
     // Probe proxy: strip hash (browsers don't send it to server anyway)
     const artPathNoHash = raw.replace(/^https:\/\/share\.articulate\.com/, '').split('#')[0];
-    const probeUrl = '/proxy' + artPathNoHash;
+    const probeUrl = '/proxy' + (artPathNoHash || '/');
     let proxyOk = false;
     try {
       const r = await fetch(probeUrl, { method: 'HEAD', cache: 'no-store' });
@@ -3492,20 +3492,6 @@ async function init() {
   initSection('files',     true);
   initSection('vmarkers',  true);
   initSection('sync',      false);
-  // Force-close video panel when no videos — bypass localStorage (initSection reads
-  // saved pref which may be '1' from a previous dir that had videos)
-  {
-    const _extV = ExternalVideos.load();
-    const _hasV = (appConfig.videos?.length || 0) + _extV.length > 0;
-    if (!_hasV) {
-      const _b = document.getElementById('files-body');
-      const _i = document.getElementById('files-icon');
-      if (_b) _b.style.display = 'none';
-      if (_i) _i.setAttribute('data-lucide', 'chevron-right');
-      const _h = _b?.previousElementSibling;
-      if (_h) _h.style.borderBottomColor = 'transparent';
-    }
-  }
 
   // Init Panel B (URL link, mode, minimize state)
   PanelA.init();
@@ -3589,6 +3575,20 @@ async function init() {
     document.body.style.zoom = '0.801';
     requestAnimationFrame(() => { document.body.style.zoom = '0.8'; });
   });
+
+  // Force-collapse video panel when no videos — runs after all init code including
+  // lucide.createIcons() and requestAnimationFrame, so nothing can reopen it after this.
+  setTimeout(() => {
+    const _hasV = (appConfig.videos?.length || 0) + ExternalVideos.load().length > 0;
+    if (!_hasV) {
+      const _b = document.getElementById('files-body');
+      const _i = document.getElementById('files-icon');
+      const _h = _b?.previousElementSibling;
+      if (_b) _b.style.display = 'none';
+      if (_i) { _i.setAttribute('data-lucide', 'chevron-right'); lucide.createIcons(); }
+      if (_h) _h.style.borderBottomColor = 'transparent';
+    }
+  }, 0);
 }
 
 // Modal keyboard shortcuts
