@@ -771,6 +771,9 @@
         <span id="course-url-text"></span>
       </a>
       <div style="flex:1"></div>
+      <select id="tab-jump-select" title="Jump to tab"
+        style="display:none;background:#0f1117;color:#a5b4fc;border:1px solid #3b4fd8;border-radius:5px;padding:1px 4px;font-size:11px;max-width:160px;height:22px;cursor:pointer;outline:none;flex-shrink:0"
+        onchange="TabManager.switchTo(this.value);this.blur()"></select>
       <button class="hdr-btn" style="width:26px;height:26px" title="Save configuration to course-viewer.config.json" onclick="saveConfig()">
         <i data-lucide="save" size="13"></i>
       </button>
@@ -1313,6 +1316,19 @@ const TabManager = {
         ${closeBtn}
       </div>`;
     }).join('');
+
+    // Tab jump select — show only when > 3 tabs
+    const sel = document.getElementById('tab-jump-select');
+    if (sel) {
+      if (this.tabs.length > 3) {
+        sel.style.display = 'inline-block';
+        sel.innerHTML = this.tabs.map(t =>
+          `<option value="${t.id}"${t.id === this.activeId ? ' selected' : ''}>${t.title}</option>`
+        ).join('');
+      } else {
+        sel.style.display = 'none';
+      }
+    }
   },
 
   _applyActiveTab() {
