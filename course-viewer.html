@@ -252,6 +252,7 @@
     min-height: 30px;
     overflow: hidden;
   }
+  html.light #reader-tab-bar { background: #e2e8f0; border-color: #cbd5e1; }
   #reader-tabs-list {
     display: flex;
     align-items: stretch;
@@ -268,8 +269,11 @@
     white-space: nowrap; user-select: none;
     min-width: 70px; max-width: 150px;
   }
+  html.light .reader-tab { border-color: #cbd5e1; color: #475569; }
   .reader-tab.active { background: #1e2947; color: #e2e8f0; }
+  html.light .reader-tab.active { background: #fff; color: #1e293b; }
   .reader-tab:hover:not(.active) { background: #1a1d2e; color: #cbd5e1; }
+  html.light .reader-tab:hover:not(.active) { background: #f1f5f9; color: #1e293b; }
   .reader-tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
   .reader-tab-close {
     color: #475569; background: none; border: none; cursor: pointer;
@@ -281,6 +285,48 @@
     padding: 0 6px; flex-shrink: 0;
     border-left: 1px solid #2d3154;
   }
+  html.light #reader-tab-input-area { border-color: #cbd5e1; }
+  html.light #tab-jump-select { background: #fff !important; color: #1e293b !important; border-color: #cbd5e1 !important; }
+  html.light #panel-b-restore { background: #e2e8f0 !important; border-color: #cbd5e1 !important; }
+
+  /* ── Markdown viewer (div-based, inherits theme) ── */
+  .markdown-viewer {
+    position: absolute; inset: 0; overflow-y: auto; visibility: hidden;
+    pointer-events: none; background: #0f1117; padding: 24px 32px;
+    color: #e2e8f0; font-family: Inter,system-ui,sans-serif;
+    font-size: 14px; line-height: 1.7;
+  }
+  html.light .markdown-viewer { background: #f8fafc; color: #1e293b; }
+  .markdown-viewer h1,.markdown-viewer h2,.markdown-viewer h3,.markdown-viewer h4 { color: #e2e8f0; margin: 1em 0 .4em; font-weight: 700; }
+  html.light .markdown-viewer h1, html.light .markdown-viewer h2, html.light .markdown-viewer h3, html.light .markdown-viewer h4 { color: #1e293b; }
+  .markdown-viewer h1 { font-size: 1.6em; border-bottom: 1px solid #2d3154; padding-bottom: .3em; }
+  html.light .markdown-viewer h1 { border-color: #e2e8f0; }
+  .markdown-viewer h2 { font-size: 1.3em; border-bottom: 1px solid #1e2947; padding-bottom: .2em; }
+  html.light .markdown-viewer h2 { border-color: #f1f5f9; }
+  .markdown-viewer p { margin: .6em 0; color: #cbd5e1; }
+  html.light .markdown-viewer p { color: #475569; }
+  .markdown-viewer a { color: #7c8cf8; text-decoration: underline; }
+  .markdown-viewer code { background: #1e2947; padding: 2px 5px; border-radius: 4px; font-size: .88em; color: #a5b4fc; font-family: 'Fira Code',monospace; }
+  html.light .markdown-viewer code { background: #e2e8f0; color: #3730a3; }
+  .markdown-viewer pre { background: #151829; border: 1px solid #2d3154; border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: .8em 0; }
+  html.light .markdown-viewer pre { background: #f1f5f9; border-color: #e2e8f0; }
+  .markdown-viewer pre code { background: none; padding: 0; color: #e2e8f0; }
+  html.light .markdown-viewer pre code { color: #1e293b; }
+  .markdown-viewer blockquote { border-left: 3px solid #3b4fd8; margin: 0; padding: .4em 1em; color: #94a3b8; background: #1a1d2e; border-radius: 0 6px 6px 0; }
+  html.light .markdown-viewer blockquote { background: #eff6ff; color: #475569; border-color: #3b82f6; }
+  .markdown-viewer table { border-collapse: collapse; width: 100%; margin: .8em 0; }
+  .markdown-viewer th, .markdown-viewer td { border: 1px solid #2d3154; padding: 6px 12px; text-align: left; }
+  html.light .markdown-viewer th, html.light .markdown-viewer td { border-color: #e2e8f0; }
+  .markdown-viewer th { background: #1e2947; color: #a5b4fc; }
+  html.light .markdown-viewer th { background: #e2e8f0; color: #3730a3; }
+  .markdown-viewer tr:nth-child(even) { background: #151829; }
+  html.light .markdown-viewer tr:nth-child(even) { background: #f8fafc; }
+  .markdown-viewer ul, .markdown-viewer ol { padding-left: 1.5em; margin: .5em 0; }
+  .markdown-viewer li { color: #cbd5e1; margin: .2em 0; }
+  html.light .markdown-viewer li { color: #475569; }
+  .markdown-viewer hr { border: none; border-top: 1px solid #2d3154; margin: 1.5em 0; }
+  html.light .markdown-viewer hr { border-color: #e2e8f0; }
+  .markdown-viewer img { max-width: 100%; border-radius: 6px; }
 
   /* ── Notes panel ── */
   #notes-panel {
@@ -1373,7 +1419,7 @@ const TabManager = {
     if (!container) return null;
     const div = document.createElement('div');
     div.id = `reader-frame-${tab.id}`;
-    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;padding:24px 32px;color:#e2e8f0;font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.7';
+    div.className = 'markdown-viewer';
     div.innerHTML = '<p style="color:#64748b">Loading…</p>';
     container.appendChild(div);
     fetch(tab.url)
@@ -1382,25 +1428,7 @@ const TabManager = {
         const html = typeof DOMPurify !== 'undefined'
           ? DOMPurify.sanitize(marked.parse(md))
           : marked.parse(md);
-        div.innerHTML = `<style>
-          h1,h2,h3,h4{color:#e2e8f0;margin:1em 0 .4em}
-          h1{font-size:1.6em;border-bottom:1px solid #2d3154;padding-bottom:.3em}
-          h2{font-size:1.3em;border-bottom:1px solid #1e2947;padding-bottom:.2em}
-          p{margin:.6em 0;color:#cbd5e1}
-          a{color:#7c8cf8;text-decoration:underline}
-          code{background:#1e2947;padding:2px 5px;border-radius:4px;font-size:.88em;color:#a5b4fc;font-family:'Fira Code',monospace}
-          pre{background:#151829;border:1px solid #2d3154;border-radius:8px;padding:14px 16px;overflow-x:auto;margin:.8em 0}
-          pre code{background:none;padding:0;color:#e2e8f0}
-          blockquote{border-left:3px solid #3b4fd8;margin:0;padding:.4em 1em;color:#94a3b8;background:#1a1d2e;border-radius:0 6px 6px 0}
-          table{border-collapse:collapse;width:100%;margin:.8em 0}
-          th,td{border:1px solid #2d3154;padding:6px 12px;text-align:left}
-          th{background:#1e2947;color:#a5b4fc}
-          tr:nth-child(even){background:#151829}
-          ul,ol{padding-left:1.5em;margin:.5em 0}
-          li{color:#cbd5e1;margin:.2em 0}
-          hr{border:none;border-top:1px solid #2d3154;margin:1.5em 0}
-          img{max-width:100%;border-radius:6px}
-        </style>${html}`;
+        div.innerHTML = html;
       })
       .catch(err => { div.innerHTML = `<p style="color:#f87171">Failed to load: ${err}</p>`; });
     return div;
@@ -3489,7 +3517,7 @@ async function init() {
 
   // Init collapsible sections
   initSection('subtitles', true);
-  initSection('files',     true);
+  initSection('files',     false);
   initSection('vmarkers',  true);
   initSection('sync',      false);
 
@@ -3576,18 +3604,17 @@ async function init() {
     requestAnimationFrame(() => { document.body.style.zoom = '0.8'; });
   });
 
-  // Force-collapse video panel when no videos — runs after all init code including
-  // lucide.createIcons() and requestAnimationFrame, so nothing can reopen it after this.
+  // Set video panel state based on content — always overrides localStorage preference.
+  // Runs after all init code so nothing can change it after this point.
   setTimeout(() => {
     const _hasV = (appConfig.videos?.length || 0) + ExternalVideos.load().length > 0;
-    if (!_hasV) {
-      const _b = document.getElementById('files-body');
-      const _i = document.getElementById('files-icon');
-      const _h = _b?.previousElementSibling;
-      if (_b) _b.style.display = 'none';
-      if (_i) { _i.setAttribute('data-lucide', 'chevron-right'); lucide.createIcons(); }
-      if (_h) _h.style.borderBottomColor = 'transparent';
-    }
+    const _b = document.getElementById('files-body');
+    const _i = document.getElementById('files-icon');
+    const _h = _b?.previousElementSibling;
+    if (_b) _b.style.display = _hasV ? 'flex' : 'none';
+    if (_i) _i.setAttribute('data-lucide', _hasV ? 'chevron-down' : 'chevron-right');
+    if (_h) _h.style.borderBottomColor = _hasV ? '' : 'transparent';
+    lucide.createIcons();
   }, 0);
 }
 
