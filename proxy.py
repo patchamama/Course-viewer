@@ -544,7 +544,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if self.command != 'HEAD':
                         try:
                             self.wfile.write(mp4_data[start: end + 1])
-                        except (BrokenPipeError, ConnectionResetError):
+                        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                             pass
                 else:
                     self.send_response(200)
@@ -560,7 +560,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             while pos < file_size:
                                 self.wfile.write(mp4_data[pos: pos + CHUNK])
                                 pos += CHUNK
-                        except (BrokenPipeError, ConnectionResetError):
+                        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                             pass
             else:
                 file_size = os.path.getsize(filepath)
@@ -590,7 +590,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         break
                                     self.wfile.write(chunk)
                                     remaining -= len(chunk)
-                        except (BrokenPipeError, ConnectionResetError):
+                        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                             pass
                 else:
                     self.send_response(200)
@@ -608,8 +608,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     if not chunk:
                                         break
                                     self.wfile.write(chunk)
-                        except (BrokenPipeError, ConnectionResetError):
+                        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                             pass
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass  # browser cancelled the request (e.g. user switched video)
         except (PermissionError, OSError):
             self.send_error(403)
 
