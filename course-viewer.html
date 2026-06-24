@@ -3361,6 +3361,18 @@ function renderFileList() {
   if (!el || !appConfig) return;
   const extVideos = ExternalVideos.load();
   const allVideos = [...appConfig.videos, ...extVideos];
+  const body = document.getElementById('files-body');
+  if (body) {
+    const hasVideos = allVideos.length > 0;
+    const userPref  = localStorage.getItem('oc_sec_files');
+    // Auto-collapse when no videos and user hasn't explicitly opened this session
+    if (!hasVideos && userPref !== '1') {
+      if (body.style.display !== 'none') toggleSection('files');
+    } else if (hasVideos && userPref === null) {
+      // Auto-open when videos appear and user has no saved preference yet
+      if (body.style.display === 'none') toggleSection('files');
+    }
+  }
   el.innerHTML = allVideos.map(v => {
     const label = v.localFile ? 'Local' : (v.externalUrl ? 'URL' : 'YouTube');
     const icon = v.localFile ? 'file-video' : (v.externalUrl ? 'globe' : 'tv-2');
