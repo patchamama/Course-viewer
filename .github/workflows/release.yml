@@ -85,27 +85,18 @@ jobs:
             "${DMG_NAME}"
           echo "DMG_FILE=${DMG_NAME}" >> "$GITHUB_ENV"
 
-      # ── Windows: NSIS installer + zip fallback ─────────────────────────────
+      # ── Windows: NSIS installer (makensis pre-installed on windows-latest) ───
       - name: Package installer (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           $TAG = $env:GITHUB_REF_NAME -replace '^v', ''
-          # Update version in NSIS script
-          (Get-Content nsis\installer.nsi) `
-            -replace 'course-viewer-setup\.exe', "course-viewer_${TAG}_windows_setup.exe" |
-            Set-Content nsis\installer.nsi
-          # Build NSIS installer (makensis available on Windows runners via path)
-          choco install nsis -y --no-progress 2>$null || $true
-          $nsis = "C:\Program Files (x86)\NSIS\makensis.exe"
-          if (Test-Path $nsis) {
-            & $nsis "nsis\installer.nsi"
-          } else {
-            Write-Host "NSIS not found, creating zip instead"
-          }
-          # Always produce a zip as well
-          Compress-Archive -Path dist\course-viewer.exe `
-            -DestinationPath "course-viewer_${TAG}_windows_amd64.zip"
+          makensis `
+            /DEXE_PATH=dist\course-viewer.exe `
+            /DVERSION=$TAG `
+            nsis\installer.nsi
+          # Also ship the raw .exe for users who prefer it
+          Copy-Item dist\course-viewer.exe "course-viewer_${TAG}_windows_portable.exe"
 
       # ── Upload build artifacts ──────────────────────────────────────────────
       - name: Upload artifacts
@@ -116,6 +107,8 @@ jobs:
             *.deb
             *.dmg
             *.zip
+            *_setup.exe
+            *_portable.exe
 
   # ── Create GitHub Release with all files ──────────────────────────────────
   release:
