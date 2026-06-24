@@ -3318,6 +3318,10 @@ async function init() {
   } catch { /* ignore invalid param */ }
 
   if (!appConfig) appConfig = { courseUrl: '', coursePassword: '', videos: [] };
+  // Ensure required fields always exist regardless of what the config returned
+  appConfig.videos        = appConfig.videos        ?? [];
+  appConfig.courseUrl     = appConfig.courseUrl     ?? '';
+  appConfig.coursePassword= appConfig.coursePassword?? '';
 
   // Demo mode: no backend AND no shared URL param → load the demo course
   let _isDemoMode = false;

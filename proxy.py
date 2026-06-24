@@ -391,13 +391,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # synthesising a minimal config on the fly when the file doesn't exist yet.
         if os.path.basename(filepath) == 'course-viewer.config.json' and \
            os.path.normpath(os.path.dirname(filepath)) == os.path.normpath(STATIC_DIR):
-            cfg = {}
+            cfg = {'courseUrl': '', 'coursePassword': '', 'videos': []}
             if os.path.isfile(filepath):
                 try:
                     with open(filepath, 'r', encoding='utf-8') as f:
-                        cfg = json.load(f)
+                        loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        cfg.update(loaded)
                 except Exception:
-                    cfg = {}
+                    pass
             cfg['_dirId']   = hashlib.md5(STATIC_DIR.encode()).hexdigest()[:8]
             cfg['_dirName'] = os.path.basename(STATIC_DIR)
             cfg['_dirPath'] = STATIC_DIR
