@@ -252,6 +252,10 @@
     min-height: 30px;
     overflow: hidden;
   }
+  /* Video panel visibility controlled by .has-videos class — !important beats any JS inline style */
+  #panel-a:not(.has-videos) #files-body { display: none !important; }
+  #panel-a.has-videos #files-body { display: flex !important; }
+
   html.light #reader-tab-bar { background: #e2e8f0; border-color: #cbd5e1; }
   #reader-tabs-list {
     display: flex;
@@ -3405,12 +3409,11 @@ function renderFileList() {
   if (!el || !appConfig) return;
   const extVideos = ExternalVideos.load();
   const allVideos = [...appConfig.videos, ...extVideos];
-  // Panel state driven by content — always set regardless of localStorage
+  // Panel visibility controlled via CSS .has-videos class — immune to any JS style override
   const _hasV = allVideos.length > 0;
-  const _b = document.getElementById('files-body');
+  document.getElementById('panel-a')?.classList.toggle('has-videos', _hasV);
   const _i = document.getElementById('files-icon');
-  const _h = _b?.previousElementSibling;
-  if (_b) _b.style.display = _hasV ? 'flex' : 'none';
+  const _h = document.getElementById('files-body')?.previousElementSibling;
   if (_i) _i.setAttribute('data-lucide', _hasV ? 'chevron-down' : 'chevron-right');
   if (_h) _h.style.borderBottomColor = _hasV ? '#2d3154' : 'transparent';
   el.innerHTML = allVideos.map(v => {
