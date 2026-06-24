@@ -97,7 +97,8 @@ jobs:
         run: |
           $TAG = $env:GITHUB_REF_NAME -replace '^v', ''
           $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
-          & $makensis /DEXE_PATH=dist\course-viewer.exe /DVERSION=$TAG nsis\installer.nsi
+          $EXE_ABS = (Resolve-Path "dist\course-viewer.exe").Path
+          & $makensis "/DEXE_PATH=$EXE_ABS" "/DVERSION=$TAG" nsis\installer.nsi
           Copy-Item dist\course-viewer.exe "course-viewer_${TAG}_windows_portable.exe"
 
       # ── Upload build artifacts ──────────────────────────────────────────────
