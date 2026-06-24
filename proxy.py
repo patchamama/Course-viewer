@@ -23,7 +23,8 @@ import re
 import hashlib
 
 PORT = int(os.environ.get('OC_PORT', '8080'))
-STATIC_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_DIR    = os.path.dirname(os.path.abspath(__file__))   # fixed — where proxy.py lives
+STATIC_DIR = APP_DIR                                       # mutable — current course dir
 TARGET_HOST = 'share.articulate.com'
 PROXY_PATH_PREFIX = '/proxy'
 CDN_HOST = 'cdn.articulate.com'
@@ -377,13 +378,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(500, str(e))
 
     # ─── Static file handler ──────────────────────────────────────────────────
+    # App files (course-viewer.html, proxy.py, demo.html, …) always come from
+    # APP_DIR so they remain available after STATIC_DIR switches to a course
+    # directory that may not contain a copy of those files.
+    _APP_FILES = frozenset({
+        'course-viewer.html', 'proxy.py', 'demo.html',
+        'course-viewer.config.json.example',
+    })
+
     def _static(self):
         raw = self.path.split('?')[0].split('#')[0]
         raw = urllib.parse.unquote(raw)
         if raw in ('', '/'):
             raw = '/course-viewer.html'
-        filepath = os.path.normpath(os.path.join(STATIC_DIR, raw.lstrip('/')))
-        if not filepath.startswith(STATIC_DIR):
+
+        name = os.path.basename(raw.lstrip('/'))
+        if name in self._APP_FILES:
+            base_dir = APP_DIR
+        else:
+            base_dir = STATIC_DIR
+
+        filepath = os.path.normpath(os.path.join(base_dir, raw.lstrip('/')))
+        if not filepath.startswith(base_dir):
             self.send_error(403)
             return
         if os.path.isdir(filepath):
