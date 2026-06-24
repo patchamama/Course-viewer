@@ -252,8 +252,6 @@
     min-height: 30px;
     overflow: hidden;
   }
-  /* Video card hidden entirely when no videos */
-  #panel-a:not(.has-videos) #files-card { display: none !important; }
 
   html.light #reader-tab-bar { background: #e2e8f0; border-color: #cbd5e1; }
   #reader-tabs-list {
@@ -3409,7 +3407,12 @@ function renderFileList() {
   const extVideos = ExternalVideos.load();
   const allVideos = [...appConfig.videos, ...extVideos];
   const _hasV = allVideos.length > 0;
-  document.getElementById('panel-a')?.classList.toggle('has-videos', _hasV);
+  clearTimeout(window._vidPanelTimer);
+  if (!_hasV) {
+    window._vidPanelTimer = setTimeout(() => {
+      if (!PanelA.minimized) PanelA.toggleMinimize();
+    }, 2000);
+  }
   el.innerHTML = allVideos.map(v => {
     const label = v.localFile ? 'Local' : (v.externalUrl ? 'URL' : 'YouTube');
     const icon = v.localFile ? 'file-video' : (v.externalUrl ? 'globe' : 'tv-2');
