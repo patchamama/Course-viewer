@@ -3409,12 +3409,15 @@ function renderFileList() {
   if (!el || !appConfig) return;
   const extVideos = ExternalVideos.load();
   const allVideos = [...appConfig.videos, ...extVideos];
-  // Panel visibility controlled via CSS .has-videos class — immune to any JS style override
   const _hasV = allVideos.length > 0;
-  console.log('[panel-videos] videos:', appConfig?.videos?.length, 'ext:', ExternalVideos.load().length, 'hasV:', _hasV);
-  document.getElementById('panel-a')?.classList.toggle('has-videos', _hasV);
+  const _panelA = document.getElementById('panel-a');
+  const _b2 = document.getElementById('files-body');
+  _panelA?.classList.toggle('has-videos', _hasV);
+  console.log('[panel-videos] hasV:', _hasV, '| panelA.has-videos:', _panelA?.classList.contains('has-videos'), '| files-body.display BEFORE force:', _b2?.style.display, '| computedDisplay:', _b2 && getComputedStyle(_b2).display);
+  if (_b2) _b2.style.setProperty('display', _hasV ? 'flex' : 'none', 'important');
+  console.log('[panel-videos] files-body.display AFTER force:', _b2?.style.display, '| computedDisplay:', _b2 && getComputedStyle(_b2).display);
   const _i = document.getElementById('files-icon');
-  const _h = document.getElementById('files-body')?.previousElementSibling;
+  const _h = _b2?.previousElementSibling;
   if (_i) _i.setAttribute('data-lucide', _hasV ? 'chevron-down' : 'chevron-right');
   if (_h) _h.style.borderBottomColor = _hasV ? '#2d3154' : 'transparent';
   el.innerHTML = allVideos.map(v => {
