@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${OC_PORT:-8080}"
+PORT="${OC_PORT:-7478}"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GITHUB_RAW="https://raw.githubusercontent.com/patchamama/Course-viewer/main"
 

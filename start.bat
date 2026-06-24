@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-set "PORT=8080"
+set "PORT=7478"
 set "DIR=%~dp0"
 if "!DIR:~-1!"=="\" set "DIR=!DIR:~0,-1!"
 set "GITHUB_RAW=https://raw.githubusercontent.com/patchamama/Course-viewer/main"

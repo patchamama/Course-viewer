@@ -22,7 +22,7 @@ import mimetypes
 import re
 import hashlib
 
-PORT = int(os.environ.get('OC_PORT', '8080'))
+PORT = int(os.environ.get('OC_PORT', '7478'))
 APP_DIR    = os.path.dirname(os.path.abspath(__file__))   # fixed — where proxy.py lives
 STATIC_DIR = APP_DIR                                       # mutable — current course dir
 TARGET_HOST = 'share.articulate.com'
