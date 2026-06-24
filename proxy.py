@@ -224,6 +224,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._serve_local_video()
         elif self.path.startswith('/serve-file'):
             self._serve_file_absolute()
+        elif self.path.startswith('/api/browse'):
+            self._browse_dir()
         elif self.path == '/api/list-nearby':
             self._list_nearby()
         else:
@@ -437,6 +439,61 @@ class Handler(http.server.BaseHTTPRequestHandler):
         ext = os.path.splitext(file_path)[1].lower()
         mime = MIME_MAP.get(ext, mimetypes.guess_type(file_path)[0] or 'application/octet-stream')
         self._send_file(file_path, mime)
+
+    # ─── Directory tree browser ────────────────────────────────────────────────
+    def _browse_dir(self):
+        VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.webm', '.m4v', '.mov'}
+        DOC_EXTS   = {'.pdf', '.md', '.html', '.htm', '.epub', '.txt'}
+        EXCL_NAMES = {'course-viewer.html', 'proxy.py', 'start.bat', 'start.sh',
+                      'index.html', 'readme.md', 'demo.html'}
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        req    = urllib.parse.unquote(params.get('path', [''])[0]).strip()
+        target = req if req and os.path.isdir(req) else os.path.dirname(STATIC_DIR)
+        parent_path = os.path.dirname(target)
+        parent = parent_path if parent_path and parent_path != target else None
+        entries = []
+        try:
+            for name in sorted(os.listdir(target), key=str.lower):
+                if name.startswith('.') or name.startswith('_'):
+                    continue
+                full = os.path.join(target, name)
+                if not os.path.isdir(full):
+                    continue
+                has_config  = os.path.isfile(os.path.join(full, 'course-viewer.config.json'))
+                has_content = has_config
+                if not has_content:
+                    try:
+                        for fname in os.listdir(full):
+                            ext = os.path.splitext(fname)[1].lower()
+                            if fname.lower() not in EXCL_NAMES and (ext in VIDEO_EXTS or ext in DOC_EXTS):
+                                has_content = True
+                                break
+                    except PermissionError:
+                        pass
+                entries.append({
+                    'name':      name,
+                    'path':      full,
+                    'hasContent': has_content,
+                    'hasConfig':  has_config,
+                    'isCurrent':  os.path.normpath(full) == os.path.normpath(STATIC_DIR),
+                })
+        except PermissionError:
+            pass
+        result = {
+            'path':    target,
+            'name':    os.path.basename(target) or target,
+            'parent':  parent,
+            'entries': entries,
+        }
+        resp = json.dumps(result, ensure_ascii=False).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(resp)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        self.wfile.write(resp)
 
     # ─── Scan sibling/parent/child dirs for course configs ────────────────────
     def _list_nearby(self):

@@ -681,6 +681,19 @@
           </div>
         </div>
 
+        <!-- Directory tree browser -->
+        <div class="card" id="dirtree-card" style="padding:0;display:none">
+          <div class="section-header" onclick="toggleSection('dirtree')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
+            <i data-lucide="folder-open" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+            <span class="section-label" style="margin:0;flex:1">Browse Dirs</span>
+            <i data-lucide="chevron-right" id="dirtree-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
+          </div>
+          <div id="dirtree-body" style="padding:0;display:none;flex-direction:column">
+            <div id="dirtree-path" style="font-size:10px;padding:5px 10px;color:#64748b;border-bottom:1px solid #1e2947;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title=""></div>
+            <div id="dirtree-list" style="padding:4px;overflow-y:auto;max-height:300px;font-size:11px"></div>
+          </div>
+        </div>
+
         <div class="section-header" onclick="toggleSection('sessions')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
           <i data-lucide="bookmark" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
           <span class="section-label" style="margin:0;flex:1">Sessions</span>
@@ -3044,6 +3057,66 @@ const DirectoryPicker = {
 // ────────────────────────────────────────────────────────────
 // DIRECTORY BROWSER
 // ────────────────────────────────────────────────────────────
+const DirTreeBrowser = {
+  _currentPath: null,
+
+  init() {
+    const list = document.getElementById('dirtree-list');
+    if (!list) return;
+    list.addEventListener('click', e => {
+      const nav = e.target.closest('[data-nav]');
+      if (nav) { DirTreeBrowser.navigate(nav.dataset.nav); return; }
+      const open = e.target.closest('[data-open]');
+      if (open) NearbyBrowser.switchTo(open.dataset.open);
+    });
+    this.navigate(null);
+  },
+
+  async navigate(path) {
+    const list  = document.getElementById('dirtree-list');
+    const label = document.getElementById('dirtree-path');
+    if (!list) return;
+    list.innerHTML = '<div style="padding:4px 6px;color:#64748b;font-size:10px">Loading…</div>';
+    try {
+      const qs = path ? `?path=${encodeURIComponent(path)}` : '';
+      const r  = await fetch(`/api/browse${qs}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const data = await r.json();
+      this._currentPath = data.path;
+      if (label) { label.textContent = data.name; label.title = data.path; }
+
+      let rows = '';
+      if (data.parent) {
+        const p = data.parent.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        rows += `<div data-nav="${p}" style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:4px;cursor:pointer;color:#7c8cf8">
+          <span style="font-size:12px">⬆</span><span>..</span>
+        </div>`;
+      }
+
+      for (const e of data.entries) {
+        const sp = e.path.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        const icon  = e.hasConfig ? '📁' : e.hasContent ? '📂' : '🗂';
+        const color = e.isCurrent ? '#a5b4fc' : '#cbd5e1';
+        const bg    = e.isCurrent ? 'background:#1a1d2e;' : '';
+        const badge = e.isCurrent
+          ? '<span style="flex-shrink:0;font-size:9px;color:#7c8cf8;padding:0 4px">●</span>'
+          : e.hasContent
+            ? `<button data-open="${sp}" style="flex-shrink:0;font-size:10px;padding:1px 6px;background:#3b4fd8;color:#fff;border:none;border-radius:4px;cursor:pointer">Open</button>`
+            : '';
+        rows += `<div style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:4px;${bg}">
+          <span data-nav="${sp}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${color};cursor:pointer" title="${sp}">${icon} ${e.name}</span>
+          ${badge}
+        </div>`;
+      }
+
+      if (!rows) rows = '<div style="padding:4px 6px;color:#64748b;font-size:10px">No subdirectories</div>';
+      list.innerHTML = rows;
+    } catch {
+      if (list) list.innerHTML = '<div style="padding:4px 6px;color:#f87171;font-size:10px">Error loading</div>';
+    }
+  }
+};
+
 const NearbyBrowser = {
   _entries: [],
 
@@ -3442,10 +3515,14 @@ async function init() {
     }
   }
 
-  // Load nearby courses browser (only when backend running)
+  // Load nearby courses + dir tree browser (only when backend running)
   if (_hasBackend) {
     initSection('nearby', false);
     NearbyBrowser.load();
+    const dirtreeCard = document.getElementById('dirtree-card');
+    if (dirtreeCard) dirtreeCard.style.display = '';
+    initSection('dirtree', false);
+    DirTreeBrowser.init();
   }
 
   // Auto-open local files when no course URL (and no saved custom tabs from localStorage)
