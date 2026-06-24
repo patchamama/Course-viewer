@@ -3377,10 +3377,14 @@ function renderFileList() {
   if (!el || !appConfig) return;
   const extVideos = ExternalVideos.load();
   const allVideos = [...appConfig.videos, ...extVideos];
-  // Auto-collapse on session/dir switches (init() handles the initial page load)
-  const body = document.getElementById('files-body');
-  if (body && allVideos.length === 0 && body.style.display !== 'none') {
-    toggleSection('files');
+  // Auto-collapse on session/dir switches — bypass localStorage via toggleSection
+  if (allVideos.length === 0) {
+    const _b = document.getElementById('files-body');
+    const _i = document.getElementById('files-icon');
+    if (_b) _b.style.display = 'none';
+    if (_i) _i.setAttribute('data-lucide', 'chevron-right');
+    const _h = _b?.previousElementSibling;
+    if (_h) _h.style.borderBottomColor = 'transparent';
   }
   el.innerHTML = allVideos.map(v => {
     const label = v.localFile ? 'Local' : (v.externalUrl ? 'URL' : 'YouTube');
@@ -3483,14 +3487,24 @@ async function init() {
   Markers.renderVideoMarkers();
   Markers.renderSyncMarkers();
 
-  // Init collapsible sections — video panel default depends on whether there are videos
+  // Init collapsible sections
+  initSection('subtitles', true);
+  initSection('files',     true);
+  initSection('vmarkers',  true);
+  initSection('sync',      false);
+  // Force-close video panel when no videos — bypass localStorage (initSection reads
+  // saved pref which may be '1' from a previous dir that had videos)
   {
     const _extV = ExternalVideos.load();
     const _hasV = (appConfig.videos?.length || 0) + _extV.length > 0;
-    initSection('subtitles', true);
-    initSection('files',     _hasV);   // collapsed when no videos, open when there are
-    initSection('vmarkers',  true);
-    initSection('sync',      false);
+    if (!_hasV) {
+      const _b = document.getElementById('files-body');
+      const _i = document.getElementById('files-icon');
+      if (_b) _b.style.display = 'none';
+      if (_i) _i.setAttribute('data-lucide', 'chevron-right');
+      const _h = _b?.previousElementSibling;
+      if (_h) _h.style.borderBottomColor = 'transparent';
+    }
   }
 
   // Init Panel B (URL link, mode, minimize state)
