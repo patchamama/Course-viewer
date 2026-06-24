@@ -8,10 +8,14 @@ set "GITHUB_RAW=https://raw.githubusercontent.com/patchamama/Course-viewer/main"
 echo === Course Viewer Launcher ===
 echo Directory: !DIR!
 
+:: App files live in _app\ to keep the course folder clean
+set "APPDIR=!DIR!\_app"
+if not exist "!APPDIR!" mkdir "!APPDIR!"
+
 :: ── Decide: fresh install or version check ───────────────────────────────────
 set "_app_files_exist=1"
-if not exist "!DIR!\proxy.py"           set "_app_files_exist=0"
-if not exist "!DIR!\course-viewer.html" set "_app_files_exist=0"
+if not exist "!APPDIR!\proxy.py"           set "_app_files_exist=0"
+if not exist "!APPDIR!\course-viewer.html" set "_app_files_exist=0"
 
 if "!_app_files_exist!"=="0" goto :fresh_install
 goto :version_check
@@ -20,9 +24,9 @@ goto :version_check
 :fresh_install
 :: New directory — download required files without asking
 for %%F in (proxy.py course-viewer.html) do (
-  if not exist "!DIR!\%%F" (
+  if not exist "!APPDIR!\%%F" (
     echo Downloading %%F from GitHub...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '!GITHUB_RAW!/%%F' -OutFile '!DIR!\%%F' -UseBasicParsing"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '!GITHUB_RAW!/%%F' -OutFile '!APPDIR!\%%F' -UseBasicParsing"
     if !errorlevel! neq 0 (
       echo ERROR: Failed to download %%F. Check your internet connection.
       pause & exit /b 1
@@ -38,7 +42,7 @@ goto :gen_config
 set "_PS=!TEMP!\cv_check.ps1"
 echo $dir       = '!DIR!'                                                                    > "!_PS!"
 echo $raw       = '!GITHUB_RAW!'                                                            >> "!_PS!"
-echo $html      = Get-Content -LiteralPath "$dir\course-viewer.html" -Raw -EA SilentlyContinue >> "!_PS!"
+echo $html      = Get-Content -LiteralPath "$dir\_app\course-viewer.html" -Raw -EA SilentlyContinue >> "!_PS!"
 echo $localVer  = ''                                                                         >> "!_PS!"
 echo if ($html -and $html -match "APP_VERSION = '([0-9][0-9.]*)'") {                       >> "!_PS!"
 echo   $localVer = $Matches[1]                                                               >> "!_PS!"
@@ -55,7 +59,7 @@ echo   $choice = Read-Host "  Update now? [y/N]"                                
 echo   if ($choice -match '^[Yy]') {                                                         >> "!_PS!"
 echo     foreach ($f in @('proxy.py', 'course-viewer.html')) {                              >> "!_PS!"
 echo       Write-Host "  Updating $f..."                                                     >> "!_PS!"
-echo       Invoke-WebRequest -Uri "$raw/$f" -OutFile "$dir\$f" -UseBasicParsing             >> "!_PS!"
+echo       Invoke-WebRequest -Uri "$raw/$f" -OutFile "$dir\_app\$f" -UseBasicParsing        >> "!_PS!"
 echo       Write-Host "  OK $f"                                                              >> "!_PS!"
 echo     }                                                                                    >> "!_PS!"
 echo   }                                                                                      >> "!_PS!"
@@ -127,8 +131,9 @@ echo Course Viewer at: http://localhost:%PORT%/
 
 start /B cmd /C "ping 127.0.0.1 -n 3 >nul && start http://localhost:%PORT%/?%random%%random%"
 
-cd /d "!DIR!"
+cd /d "!APPDIR!"
 set "OC_PORT=%PORT%"
+set "OC_STATIC_DIR=!DIR!"
 
 where py >nul 2>&1
 if %errorlevel% == 0 ( py proxy.py & goto :end )

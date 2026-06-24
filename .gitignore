@@ -23,6 +23,9 @@ course.readme.txt
 *.pdf
 *.epub
 
+# App subfolder (auto-downloaded by start.sh / start.bat)
+_app/
+
 # Python
 __pycache__/
 *.pyc

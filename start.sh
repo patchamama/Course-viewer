@@ -33,24 +33,38 @@ _download_file() {
   fi
 }
 
-# ── Auto-download or update app files ────────────────────────────────────────
+# ── Auto-download or update app files (isolated in _app/) ────────────────────
+APP_SUBDIR="$DIR/_app"
+mkdir -p "$APP_SUBDIR"
+
 _app_files_exist=true
 for file in proxy.py course-viewer.html; do
-  [[ ! -f "$DIR/$file" ]] && _app_files_exist=false && break
+  [[ ! -f "$APP_SUBDIR/$file" ]] && _app_files_exist=false && break
 done
 
+_download_app_file() {
+  local file="$1"
+  if command -v curl &>/dev/null; then
+    curl -fsSL "$GITHUB_RAW/$file" -o "$APP_SUBDIR/$file" \
+      || { echo "ERROR: failed to download $file"; exit 1; }
+  elif command -v wget &>/dev/null; then
+    wget -q -O "$APP_SUBDIR/$file" "$GITHUB_RAW/$file" \
+      || { echo "ERROR: failed to download $file"; exit 1; }
+  else
+    echo "ERROR: curl or wget required."; exit 1
+  fi
+}
+
 if ! $_app_files_exist; then
-  # Fresh install — download without asking
   for file in proxy.py course-viewer.html; do
-    if [[ ! -f "$DIR/$file" ]]; then
+    if [[ ! -f "$APP_SUBDIR/$file" ]]; then
       echo "Downloading $file from GitHub..."
-      _download_file "$file"
+      _download_app_file "$file"
       echo "  OK $file"
     fi
   done
 else
-  # Files exist — check for a newer release
-  _local_ver=$(grep -o "APP_VERSION = '[0-9][0-9.]*'" "$DIR/course-viewer.html" 2>/dev/null \
+  _local_ver=$(grep -o "APP_VERSION = '[0-9][0-9.]*'" "$APP_SUBDIR/course-viewer.html" 2>/dev/null \
     | grep -o '[0-9][0-9.]*' | head -1)
   _latest_ver=$(curl -fsSL --connect-timeout 5 \
     "https://api.github.com/repos/patchamama/Course-viewer/releases/latest" 2>/dev/null \
@@ -63,7 +77,7 @@ else
     if [[ "$_choice" =~ ^[Yy]$ ]]; then
       for file in proxy.py course-viewer.html; do
         echo "  Updating $file..."
-        _download_file "$file"
+        _download_app_file "$file"
         echo "  OK $file"
       done
     fi
@@ -175,5 +189,5 @@ echo "Open: http://localhost:$PORT/"
   fi
 ) &
 
-cd "$DIR"
-OC_PORT="$PORT" python3 proxy.py
+cd "$APP_SUBDIR"
+OC_PORT="$PORT" OC_STATIC_DIR="$DIR" python3 proxy.py

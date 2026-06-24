@@ -24,7 +24,7 @@ import hashlib
 
 PORT = int(os.environ.get('OC_PORT', '7478'))
 APP_DIR    = os.path.dirname(os.path.abspath(__file__))   # fixed — where proxy.py lives
-STATIC_DIR = APP_DIR                                       # mutable — current course dir
+STATIC_DIR = os.path.normpath(os.environ.get('OC_STATIC_DIR') or APP_DIR)  # mutable — course dir
 TARGET_HOST = 'share.articulate.com'
 PROXY_PATH_PREFIX = '/proxy'
 CDN_HOST = 'cdn.articulate.com'
