@@ -85,17 +85,19 @@ jobs:
             "${DMG_NAME}"
           echo "DMG_FILE=${DMG_NAME}" >> "$GITHUB_ENV"
 
-      # ── Windows: NSIS installer (makensis pre-installed on windows-latest) ───
+      # ── Windows: install NSIS then build installer ────────────────────────────
+      - name: Install NSIS (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: choco install nsis --yes --no-progress
+
       - name: Package installer (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           $TAG = $env:GITHUB_REF_NAME -replace '^v', ''
-          makensis `
-            /DEXE_PATH=dist\course-viewer.exe `
-            /DVERSION=$TAG `
-            nsis\installer.nsi
-          # Also ship the raw .exe for users who prefer it
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          & $makensis /DEXE_PATH=dist\course-viewer.exe /DVERSION=$TAG nsis\installer.nsi
           Copy-Item dist\course-viewer.exe "course-viewer_${TAG}_windows_portable.exe"
 
       # ── Upload build artifacts ──────────────────────────────────────────────
