@@ -29,6 +29,19 @@ __pycache__/
 *.pyo
 .env
 
+# PyInstaller
+dist/
+build/
+*.spec.bak
+
+# Generated icons (created by assets/create_icons.py at build time)
+assets/icon.png
+assets/icon.ico
+assets/icon.icns
+
+# NSIS output
+*-setup.exe
+
 # OS files
 .DS_Store
 Thumbs.db

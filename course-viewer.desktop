@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Name=Course Viewer
+Comment=Local-first course companion — video player, proxy, notes
+Exec=/usr/bin/course-viewer %f
+Icon=course-viewer
+Terminal=false
+Type=Application
+Categories=Education;
+MimeType=inode/directory;
+StartupNotify=false
