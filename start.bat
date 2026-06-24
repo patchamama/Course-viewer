@@ -103,7 +103,8 @@ echo   $videos += [PSCustomObject]@{ id=$vidId; title=$title; youtubeId=$youtube
 echo }                                                                                        >> "!_PS2!"
 echo $cfg  = [ordered]@{ courseUrl=$courseUrl; coursePassword=$coursePassword; videos=$videos } >> "!_PS2!"
 echo $json = $cfg ^| ConvertTo-Json -Depth 5                                                >> "!_PS2!"
-echo Set-Content -LiteralPath (Join-Path $dir 'course-viewer.config.json') -Value $json -Encoding UTF8 >> "!_PS2!"
+echo $utf8NoBom = [System.Text.UTF8Encoding]::new($false)                                    >> "!_PS2!"
+echo [System.IO.File]::WriteAllText((Join-Path $dir 'course-viewer.config.json'), $json, $utf8NoBom) >> "!_PS2!"
 echo Write-Host ('Generated course-viewer.config.json (' + $mp4s.Count + ' videos)')       >> "!_PS2!"
 powershell -NoProfile -ExecutionPolicy Bypass -File "!_PS2!"
 if !errorlevel! neq 0 (

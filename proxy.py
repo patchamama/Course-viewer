@@ -32,7 +32,7 @@ CDN_PROXY_PATH_PREFIX = '/proxy-cdn'
 # Read password from course-viewer.config.json
 _password = 'Handout4EFB'
 try:
-    with open(os.path.join(STATIC_DIR, 'course-viewer.config.json'), 'r', encoding='utf-8') as f:
+    with open(os.path.join(STATIC_DIR, 'course-viewer.config.json'), 'r', encoding='utf-8-sig') as f:
         _cfg = json.load(f)
         _password = _cfg.get('coursePassword', _password)
 except Exception:
@@ -394,7 +394,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             cfg = {'courseUrl': '', 'coursePassword': '', 'videos': []}
             if os.path.isfile(filepath):
                 try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
+                    with open(filepath, 'r', encoding='utf-8-sig') as f:
                         loaded = json.load(f)
                     if isinstance(loaded, dict):
                         cfg.update(loaded)
