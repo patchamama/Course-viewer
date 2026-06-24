@@ -4,16 +4,22 @@ import os
 
 block_cipher = None
 
+# Build datas list before Analysis — avoids TOC tuple-arity issues
+_datas = [
+    ('course-viewer.html', '.'),
+    ('demo.html', '.'),
+    ('course-viewer.config.json.example', '.'),
+]
+for _asset in ['assets/icon.png', 'assets/icon.ico', 'assets/icon.icns']:
+    if os.path.isfile(_asset):
+        _datas.append((_asset, 'assets'))
+
 a = Analysis(
     ['app.py'],
     pathex=['.'],
     binaries=[],
-    datas=[
-        ('course-viewer.html', '.'),
-        ('demo.html', '.'),
-        ('course-viewer.config.json.example', '.'),
-    ],
-    hiddenimports=['proxy', 'updater', 'pystray._util.gtk', 'pystray._util.win32', 'pystray._util.darwin'],
+    datas=_datas,
+    hiddenimports=['proxy', 'updater'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -23,11 +29,6 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
-
-# Include assets only if they exist
-for asset in ['assets/icon.png', 'assets/icon.ico']:
-    if os.path.isfile(asset):
-        a.datas += [(asset, os.path.dirname(asset))]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
@@ -45,7 +46,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,   # no terminal window
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -55,7 +56,7 @@ exe = EXE(
     onefile=True,
 )
 
-# macOS: wrap exe in a .app bundle
+# macOS: wrap binary in a .app bundle
 if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
@@ -63,10 +64,10 @@ if sys.platform == 'darwin':
         icon='assets/icon.icns' if os.path.isfile('assets/icon.icns') else None,
         bundle_identifier='com.patchamama.courseviewer',
         info_plist={
-            'CFBundleVersion': '1.0.0',
-            'CFBundleShortVersionString': '1.0.0',
+            'CFBundleVersion': '1.0.1',
+            'CFBundleShortVersionString': '1.0.1',
             'NSHighResolutionCapable': True,
-            'LSUIElement': True,  # hide from Dock (tray-only app)
+            'LSUIElement': True,
             'CFBundleDocumentTypes': [
                 {
                     'CFBundleTypeRole': 'Viewer',
