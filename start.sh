@@ -33,8 +33,8 @@ _download_file() {
   fi
 }
 
-# ── Auto-download or update app files (isolated in _app/) ────────────────────
-APP_SUBDIR="$DIR/_app"
+# ── Auto-download or update app files (system temp dir, shared across courses)
+APP_SUBDIR="${TMPDIR:-/tmp}/courseviewer_app"
 mkdir -p "$APP_SUBDIR"
 
 _app_files_exist=true

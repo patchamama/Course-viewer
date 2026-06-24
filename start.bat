@@ -8,8 +8,8 @@ set "GITHUB_RAW=https://raw.githubusercontent.com/patchamama/Course-viewer/main"
 echo === Course Viewer Launcher ===
 echo Directory: !DIR!
 
-:: App files live in _app\ to keep the course folder clean
-set "APPDIR=!DIR!\_app"
+:: App files live in system temp — shared across all course folders, never pollutes project dirs
+set "APPDIR=%TEMP%\courseviewer_app"
 if not exist "!APPDIR!" mkdir "!APPDIR!"
 
 :: ── Decide: fresh install or version check ───────────────────────────────────
