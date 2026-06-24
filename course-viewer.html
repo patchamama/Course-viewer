@@ -632,6 +632,9 @@
       <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Video.openLocalModal()" title="Open local video file">
         <i data-lucide="folder-open" size="12"></i> Local
       </button>
+      <button id="btn-course-dir" class="btn btn-ghost" style="padding:2px 8px;font-size:11px;display:none" onclick="CourseDir.toggle()" title="Show course structure">
+        <i data-lucide="list-ordered" size="12"></i> Course Dir
+      </button>
       <button class="hdr-btn" id="btn-panela-minimize" style="width:26px;height:26px;flex-shrink:0" title="Minimize / restore panel" onclick="PanelA.toggleMinimize()">
         <i data-lucide="panel-left-close" size="13"></i>
       </button>
@@ -696,6 +699,18 @@
               <option value="online-join">Online Join</option>
             </select>
           </div>
+        </div>
+      </div>
+
+      <!-- Course Directory panel (shown when flat-prefix or subdirectory pattern detected) -->
+      <div class="card" id="course-dir-card" style="padding:0;display:none">
+        <div class="section-header" onclick="toggleSection('coursedir')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
+          <i data-lucide="list-ordered" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+          <span class="section-label" style="margin:0;flex:1">Course Directory</span>
+          <i data-lucide="chevron-right" id="coursedir-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
+        </div>
+        <div id="coursedir-body" style="padding:8px;display:none;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto">
+          <div id="coursedir-list"></div>
         </div>
       </div>
 
@@ -3371,6 +3386,122 @@ const ImageViewer = {
   }
 };
 
+// ────────────────────────────────────────────────────────────
+// COURSE DIRECTORY — auto-structured chapter navigation
+// ────────────────────────────────────────────────────────────
+const CourseDir = {
+  _data: null,
+  _activeIdx: -1,
+
+  async detect() {
+    if (!window._hasBackend) return;
+    try {
+      const r = await fetch('/api/course-structure');
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!data.pattern || !data.chapters.length) return;
+      this._data = data;
+      this._render();
+      const btn  = document.getElementById('btn-course-dir');
+      const card = document.getElementById('course-dir-card');
+      if (btn)  btn.style.display  = '';
+      if (card) card.style.display = '';
+      initSection('coursedir', false);
+    } catch {}
+  },
+
+  toggle() { toggleSection('coursedir'); },
+
+  _render() {
+    const list = document.getElementById('coursedir-list');
+    if (!list || !this._data) return;
+    list.innerHTML = this._data.chapters.map((ch, idx) => {
+      const vCnt = ch.videos.length;
+      const dCnt = ch.docs.length;
+      const meta = [
+        vCnt ? `&#9654; ${vCnt} video${vCnt > 1 ? 's' : ''}` : '',
+        dCnt ? `${dCnt} doc${dCnt > 1 ? 's' : ''}` : '',
+      ].filter(Boolean).join(' &middot; ');
+      return `<div class="file-item" data-cdir-idx="${idx}"
+          style="flex-direction:column;align-items:flex-start;gap:2px;padding:6px 8px;cursor:pointer"
+          onclick="CourseDir.openChapter(${idx})">
+        <span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%">${ch.title}</span>
+        ${meta ? `<span style="font-size:10px;color:#64748b">${meta}</span>` : ''}
+      </div>`;
+    }).join('');
+    lucide.createIcons();
+  },
+
+  async openChapter(idx) {
+    if (!this._data) return;
+    const ch = this._data.chapters[idx];
+    this._activeIdx = idx;
+    document.querySelectorAll('[data-cdir-idx]').forEach(el => {
+      el.classList.toggle('active', +el.dataset.cdirIdx === idx);
+    });
+    if (ch.videos.length > 0) {
+      const v = ch.videos[0];
+      Video.load({
+        id: 'cdir_' + idx + '_0',
+        title: v.name.replace(/\.[^.]+$/, ''),
+        youtubeId: null,
+        localFile: v.rel,
+        subtitleFile: '',
+      });
+    }
+    for (const doc of ch.docs) {
+      if (doc.name.toLowerCase().endsWith('.zip')) {
+        this._openZipViewer(doc.rel, doc.name);
+      } else {
+        const url = doc.rel.split('/').map(encodeURIComponent).join('/');
+        TabManager.openTab(url, doc.name, 'custom');
+      }
+    }
+  },
+
+  async _openZipViewer(zipRel, zipName) {
+    const tabId = 'zip_' + btoa(unescape(encodeURIComponent(zipRel))).replace(/[^a-z0-9]/gi, '').slice(0, 20);
+    if (TabManager.tabs.find(t => t.id === tabId)) { TabManager.switchTo(tabId); return; }
+
+    const tab = { id: tabId, title: '🗜 ' + zipName, url: '', type: 'zip-viewer', scrollY: 0 };
+    TabManager.tabs.push(tab);
+    TabManager.activeId = tabId;
+    TabManager._renderTabBar();
+
+    const container = document.getElementById('reader-frames-container');
+    const div = document.createElement('div');
+    div.id = `reader-frame-${tabId}`;
+    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;color:#e2e8f0;font-size:12px;padding:12px';
+    div.innerHTML = '<div style="color:#64748b">Loading ZIP…</div>';
+    container.appendChild(div);
+    TabManager._applyActiveTab();
+    TabManager._save();
+
+    try {
+      const r = await fetch('/api/zip-list?path=' + encodeURIComponent(zipRel));
+      if (!r.ok) throw new Error('Failed');
+      const { files } = await r.json();
+      div.innerHTML = `
+        <div style="font-weight:600;margin-bottom:10px;color:#94a3b8">${zipName} &mdash; ${files.length} file${files.length !== 1 ? 's' : ''}</div>
+        ${files.map(f => `
+          <div class="file-item" style="margin-bottom:2px"
+               onclick="CourseDir._openZipEntry(${JSON.stringify(zipRel)}, ${JSON.stringify(f)})">
+            <i data-lucide="file" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f}">${f}</span>
+          </div>`).join('')}`;
+      lucide.createIcons();
+    } catch {
+      div.innerHTML = '<div style="color:#f87171;padding:8px">Could not read ZIP contents.</div>';
+    }
+  },
+
+  _openZipEntry(zipRel, innerPath) {
+    const url  = '/api/zip-extract?zip=' + encodeURIComponent(zipRel) + '&entry=' + encodeURIComponent(innerPath);
+    const name = innerPath.split('/').pop();
+    TabManager.openTab(url, name, 'custom');
+  },
+};
+
 async function saveConfig() {
   const extVideos = ExternalVideos.load().map(v => { const c = {...v}; delete c._external; return c; });
   const mergedVideos = [...(appConfig.videos || []), ...extVideos];
@@ -3542,6 +3673,7 @@ async function init() {
   ReaderZoom.init();
   NotesZoom.init();
   TabManager.init();
+  if (_hasBackend) CourseDir.detect();
   // Auto-save directory session so it appears in the listbox alongside manual sessions
   if (_hasBackend && appConfig._dirId) {
     Sessions.autoSave(appConfig._dirId, appConfig._dirName || appConfig._dirId);

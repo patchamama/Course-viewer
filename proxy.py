@@ -229,6 +229,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._browse_dir()
         elif self.path == '/api/list-nearby':
             self._list_nearby()
+        elif self.path.startswith('/api/course-structure'):
+            self._course_structure()
+        elif self.path.startswith('/api/zip-list'):
+            self._zip_list()
+        elif self.path.startswith('/api/zip-extract'):
+            self._zip_extract()
         else:
             self._static()
 
@@ -255,6 +261,139 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         self.end_headers()
+
+    # ─── JSON response helper ─────────────────────────────────────────────────
+    def _json(self, data):
+        resp = json.dumps(data, ensure_ascii=False).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(resp)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        if self.command != 'HEAD':
+            self.wfile.write(resp)
+
+    # ─── Course structure detection ───────────────────────────────────────────
+    def _course_structure(self):
+        import re
+        VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.webm', '.m4v', '.mov'}
+        DOC_EXTS   = {'.pdf', '.md', '.html', '.htm', '.epub', '.txt', '.zip'}
+        EXCL_NAMES = {
+            'course-viewer.html', 'proxy.py', 'start.bat', 'start.sh',
+            'index.html', 'readme.md', 'demo.html', 'course-viewer.config.json',
+            'course-viewer.config.json.example',
+        }
+        result = {'pattern': None, 'chapters': []}
+        try:
+            all_names = sorted(
+                [n for n in os.listdir(STATIC_DIR)
+                 if not n.startswith('.') and not n.startswith('_')],
+                key=str.lower
+            )
+        except Exception:
+            self._json(result)
+            return
+
+        subdirs    = [n for n in all_names if os.path.isdir(os.path.join(STATIC_DIR, n))]
+        root_files = [n for n in all_names
+                      if os.path.isfile(os.path.join(STATIC_DIR, n))
+                      and n.lower() not in EXCL_NAMES]
+
+        # Pattern A — numeric prefix groups (01, 02, 03 …)
+        pfx_re = re.compile(r'^(\d+)')
+        groups  = {}
+        for fname in root_files:
+            m = pfx_re.match(fname)
+            if m:
+                groups.setdefault(m.group(1), []).append(fname)
+
+        if len(groups) >= 2:
+            chapters = []
+            for pfx in sorted(groups, key=lambda x: int(x)):
+                files  = sorted(groups[pfx])
+                videos = [{'name': f, 'rel': f}
+                          for f in files if os.path.splitext(f)[1].lower() in VIDEO_EXTS]
+                docs   = [{'name': f, 'rel': f}
+                          for f in files if os.path.splitext(f)[1].lower() in DOC_EXTS]
+                if not videos and not docs:
+                    continue
+                src   = videos[0]['name'] if videos else docs[0]['name']
+                title = os.path.splitext(src)[0]
+                chapters.append({'title': title, 'videos': videos, 'docs': docs, 'subpath': None})
+            if chapters:
+                result = {'pattern': 'flat-prefix', 'chapters': chapters}
+
+        elif len(subdirs) >= 2:
+            chapters = []
+            for sub in subdirs:
+                sub_abs = os.path.join(STATIC_DIR, sub)
+                try:
+                    sub_files = sorted(os.listdir(sub_abs), key=str.lower)
+                except Exception:
+                    sub_files = []
+                videos, docs = [], []
+                for f in sub_files:
+                    if f.startswith('.') or f.startswith('_'):
+                        continue
+                    ext = os.path.splitext(f)[1].lower()
+                    rel = sub + '/' + f
+                    if not os.path.isfile(os.path.join(sub_abs, f)):
+                        continue
+                    if ext in VIDEO_EXTS:
+                        videos.append({'name': f, 'rel': rel})
+                    elif ext in DOC_EXTS:
+                        docs.append({'name': f, 'rel': rel})
+                chapters.append({'title': sub, 'videos': videos, 'docs': docs, 'subpath': sub})
+            if chapters:
+                result = {'pattern': 'subdirectory', 'chapters': chapters}
+
+        self._json(result)
+
+    # ─── ZIP browser: list contents ───────────────────────────────────────────
+    def _zip_list(self):
+        import zipfile
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        rel    = urllib.parse.unquote(params.get('path', [''])[0])
+        absp   = os.path.normpath(os.path.join(STATIC_DIR, rel))
+        if not absp.startswith(STATIC_DIR) or not os.path.isfile(absp):
+            self.send_error(404)
+            return
+        try:
+            with zipfile.ZipFile(absp) as zf:
+                files = sorted(n for n in zf.namelist() if not n.endswith('/'))
+            self._json({'files': files})
+        except Exception:
+            self.send_error(400, 'Invalid ZIP')
+
+    # ─── ZIP browser: extract and serve a single entry ────────────────────────
+    def _zip_extract(self):
+        import zipfile
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        rel    = urllib.parse.unquote(params.get('zip',   [''])[0])
+        entry  = urllib.parse.unquote(params.get('entry', [''])[0])
+        absp   = os.path.normpath(os.path.join(STATIC_DIR, rel))
+        if not absp.startswith(STATIC_DIR) or not os.path.isfile(absp):
+            self.send_error(404)
+            return
+        try:
+            with zipfile.ZipFile(absp) as zf:
+                data = zf.read(entry)
+            ext  = os.path.splitext(entry)[1].lower()
+            mime = MIME_MAP.get(ext, mimetypes.guess_type(entry)[0] or 'application/octet-stream')
+            self.send_response(200)
+            self.send_header('Content-Type', mime)
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Disposition',
+                             f'inline; filename="{os.path.basename(entry)}"')
+            self.end_headers()
+            if self.command != 'HEAD':
+                self.wfile.write(data)
+        except KeyError:
+            self.send_error(404, 'Entry not found in ZIP')
+        except Exception as e:
+            self.send_error(500, str(e))
 
     # ─── List directory contents for the directory browser ────────────────────
     def _list_directory(self):
