@@ -252,9 +252,8 @@
     min-height: 30px;
     overflow: hidden;
   }
-  /* Video panel visibility controlled by .has-videos class — !important beats any JS inline style */
-  #panel-a:not(.has-videos) #files-body { display: none !important; }
-  #panel-a.has-videos #files-body { display: flex !important; }
+  /* Video card hidden entirely when no videos */
+  #panel-a:not(.has-videos) #files-card { display: none !important; }
 
   html.light #reader-tab-bar { background: #e2e8f0; border-color: #cbd5e1; }
   #reader-tabs-list {
@@ -703,7 +702,7 @@
       </div>
 
       <!-- File list -->
-      <div class="card" style="padding:0">
+      <div class="card" id="files-card" style="padding:0">
         <div class="section-header" onclick="toggleSection('files')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
           <i data-lucide="folder-open" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
           <span class="section-label" style="margin:0;flex:1">Course Videos</span>
@@ -3410,16 +3409,7 @@ function renderFileList() {
   const extVideos = ExternalVideos.load();
   const allVideos = [...appConfig.videos, ...extVideos];
   const _hasV = allVideos.length > 0;
-  const _panelA = document.getElementById('panel-a');
-  const _b2 = document.getElementById('files-body');
-  _panelA?.classList.toggle('has-videos', _hasV);
-  console.log('[panel-videos] hasV:', _hasV, '| panelA.has-videos:', _panelA?.classList.contains('has-videos'), '| files-body.display BEFORE force:', _b2?.style.display, '| computedDisplay:', _b2 && getComputedStyle(_b2).display);
-  if (_b2) _b2.style.setProperty('display', _hasV ? 'flex' : 'none', 'important');
-  console.log('[panel-videos] files-body.display AFTER force:', _b2?.style.display, '| computedDisplay:', _b2 && getComputedStyle(_b2).display);
-  const _i = document.getElementById('files-icon');
-  const _h = _b2?.previousElementSibling;
-  if (_i) _i.setAttribute('data-lucide', _hasV ? 'chevron-down' : 'chevron-right');
-  if (_h) _h.style.borderBottomColor = _hasV ? '#2d3154' : 'transparent';
+  document.getElementById('panel-a')?.classList.toggle('has-videos', _hasV);
   el.innerHTML = allVideos.map(v => {
     const label = v.localFile ? 'Local' : (v.externalUrl ? 'URL' : 'YouTube');
     const icon = v.localFile ? 'file-video' : (v.externalUrl ? 'globe' : 'tv-2');
