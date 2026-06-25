@@ -72,15 +72,11 @@ else
 
   if [[ -n "$_latest_ver" && -n "$_local_ver" ]] && _ver_gt "$_latest_ver" "$_local_ver"; then
     echo ""
-    echo "  New version available: v${_latest_ver}  (installed: v${_local_ver})"
-    read -r -p "  Update now? [y/N] " _choice
-    if [[ "$_choice" =~ ^[Yy]$ ]]; then
-      for file in proxy.py course-viewer.html; do
-        echo "  Updating $file..."
-        _download_app_file "$file"
-        echo "  OK $file"
-      done
-    fi
+    echo "  Updating v${_local_ver} → v${_latest_ver}..."
+    for file in proxy.py course-viewer.html; do
+      _download_app_file "$file"
+      echo "  OK $file"
+    done
   fi
 fi
 
