@@ -1224,7 +1224,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.4';
+const APP_VERSION = '1.1.5';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -3831,7 +3831,7 @@ const DirBrowser = {
   },
 
   _renderHTML(el, data) {
-    const DOC_EXTS   = new Set(['.pdf','.md','.html','.htm','.epub','.txt','.docx','.doc','.rtf']);
+    const DOC_EXTS   = new Set(['.pdf','.md','.html','.htm','.epub','.txt','.docx','.doc','.rtf','.zip']);
     const CODE_EXTS  = new Set(['.js','.json','.xml','.php','.py','.ts','.css','.sh','.bat']);
     const IMG_EXTS   = new Set(['.png','.jpg','.jpeg','.gif','.webp','.svg']);
     const VIDEO_EXTS = new Set(['.mp4','.m4v','.mov','.mkv','.avi','.webm','.ogg']);
@@ -4793,7 +4793,8 @@ const CourseDir = {
   // Open a subtitle viewer tab directly from a full .srt/.vtt path
   async _openSubtitleTabFromPath(srtPath, title, chapterIdx) {
     try {
-      const content = await fetch(`/api/file-content?path=${encodeURIComponent(srtPath)}`).then(r => r.ok ? r.text() : null);
+      const encodedUrl = srtPath.split('/').map(encodeURIComponent).join('/');
+      const content = await fetch(encodedUrl).then(r => r.ok ? r.text() : null);
       if (!content) { toast('Could not read subtitle file'); return; }
       const tabId = 'subf_' + btoa(srtPath).replace(/[^a-zA-Z0-9]/g,'').slice(0,20);
       if (TabManager.tabs.find(t => t.id === tabId)) { TabManager.switchTo(tabId); return; }
@@ -4864,7 +4865,8 @@ const CourseDir = {
     for (const ext of exts) {
       const rel = basePath + '.' + ext;
       try {
-        const content = await fetch(`/api/file-content?path=${encodeURIComponent(rel)}`).then(r => r.ok ? r.text() : null);
+        const encodedRel = rel.split('/').map(encodeURIComponent).join('/');
+        const content = await fetch(encodedRel).then(r => r.ok ? r.text() : null);
         if (!content) continue;
 
         const tabId = 'sub_' + chapterIdx + '_' + encodeURIComponent(title);
