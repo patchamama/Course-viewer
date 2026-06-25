@@ -233,6 +233,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._course_structure()
         elif self.path.startswith('/api/zip-list'):
             self._zip_list()
+        elif self.path.startswith('/api/zip-serve'):
+            self._zip_serve()
         elif self.path.startswith('/api/zip-extract'):
             self._zip_extract()
         elif self.path.startswith('/api/epub-html'):
@@ -553,14 +555,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     # ─── DOCX / DOC / RTF → HTML viewer ──────────────────────────────────────
     def _docx_html(self):
-        import re as _re, zipfile
         params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         rel    = urllib.parse.unquote(params.get('path', [''])[0])
         absp   = os.path.normpath(os.path.join(STATIC_DIR, rel))
         if not absp.startswith(STATIC_DIR) or not os.path.isfile(absp):
             self.send_error(404); return
-        ext = os.path.splitext(absp)[1].lower()
-        title = os.path.splitext(os.path.basename(rel))[0]
+        self._serve_converted_doc(absp)
+
+    def _serve_converted_doc(self, absp):
+        import re as _re, zipfile
+        ext   = os.path.splitext(absp)[1].lower()
+        title = os.path.splitext(os.path.basename(absp))[0]
         try:
             if ext in {'.docx', '.doc'}:
                 try:
@@ -569,11 +574,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         result = mammoth.convert_to_html(fh)
                     html_body = result.value
                 except ImportError:
-                    # Fallback: extract raw text from docx XML
                     try:
                         with zipfile.ZipFile(absp) as zf:
                             if 'word/document.xml' in zf.namelist():
-                                xml = zf.read('word/document.xml').decode('utf-8', errors='replace')
+                                xml  = zf.read('word/document.xml').decode('utf-8', errors='replace')
                                 text = _re.sub(r'<[^>]+>', ' ', xml)
                                 text = _re.sub(r'\s+', ' ', text).strip()
                                 html_body = (f'<div style="color:#fbbf24;font-size:11px;margin-bottom:12px">'
@@ -586,7 +590,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif ext == '.rtf':
                 with open(absp, encoding='utf-8', errors='replace') as fh:
                     raw = fh.read()
-                # Best-effort RTF stripping (no dependencies)
                 text = _re.sub(r'\\[a-z]+\-?\d*[ ]?', ' ', raw)
                 text = _re.sub(r'[{}]', '', text)
                 text = _re.sub(r'\\[^a-z]', '', text)
@@ -617,6 +620,67 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Content-Length', str(len(data)))
         self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        if self.command != 'HEAD':
+            self.wfile.write(data)
+
+    def _zip_serve(self):
+        """Extract a ZIP entry to a temp folder and serve with appropriate conversion."""
+        import zipfile, tempfile, hashlib
+        params  = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        zip_rel = urllib.parse.unquote(params.get('zip',   [''])[0])
+        entry   = urllib.parse.unquote(params.get('entry', [''])[0])
+
+        zip_abs = os.path.normpath(os.path.join(STATIC_DIR, zip_rel))
+        if not zip_abs.startswith(STATIC_DIR) or not os.path.isfile(zip_abs):
+            self.send_error(404); return
+
+        try:
+            with zipfile.ZipFile(zip_abs) as zf:
+                names = zf.namelist()
+                entry_norm = entry.replace('\\', '/')
+                actual = entry_norm if entry_norm in names else None
+                if actual is None:
+                    el = entry_norm.lower()
+                    ms = [n for n in names if not n.endswith('/') and n.lower() == el]
+                    if ms: actual = ms[0]
+                if actual is None:
+                    bn = entry_norm.rsplit('/', 1)[-1].lower()
+                    ms = [n for n in names if not n.endswith('/') and n.rsplit('/', 1)[-1].lower() == bn]
+                    if ms: actual = ms[0]
+                if actual is None:
+                    self.send_error(404, 'Entry not found'); return
+
+                ext = os.path.splitext(actual)[1].lower()
+
+                # Extract to a stable temp dir (keyed by zip path hash)
+                h       = hashlib.md5(zip_abs.encode()).hexdigest()[:12]
+                tmp_dir = os.path.join(tempfile.gettempdir(), f'cv_zip_{h}')
+                os.makedirs(tmp_dir, exist_ok=True)
+                zf.extract(actual, tmp_dir)
+                temp_path = os.path.normpath(os.path.join(tmp_dir, actual.replace('/', os.sep)))
+
+        except Exception as e:
+            self.send_error(500, str(e)); return
+
+        # Route based on extension
+        if ext in ('.docx', '.doc', '.rtf'):
+            self._serve_converted_doc(temp_path)
+            return
+
+        # Serve raw bytes from temp file
+        try:
+            with open(temp_path, 'rb') as f:
+                data = f.read()
+        except Exception as e:
+            self.send_error(500, str(e)); return
+
+        mime = MIME_MAP.get(ext, mimetypes.guess_type(temp_path)[0] or 'application/octet-stream')
+        self.send_response(200)
+        self.send_header('Content-Type', mime)
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Disposition', f'inline; filename="{os.path.basename(actual)}"')
         self.end_headers()
         if self.command != 'HEAD':
             self.wfile.write(data)

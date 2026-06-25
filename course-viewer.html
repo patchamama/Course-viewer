@@ -1229,7 +1229,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.6';
+const APP_VERSION = '1.1.7';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -3908,8 +3908,10 @@ const DirBrowser = {
       <style>
         .db-row { padding:5px 12px; border-bottom:1px solid #1e2947; transition:background .1s; }
         .db-row:hover { background:#1e2947; }
+        html.light .db-row { border-bottom-color:#e2e8f0; }
+        html.light .db-row:hover { background:#e8edf5; }
       </style>
-      <div style="padding:10px 12px;background:#151829;border-bottom:1px solid #2d3154;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div class="cv-pane" style="padding:10px 12px;border-bottom:1px solid #2d3154;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${breadcrumb.join('')}
         <div style="flex:1"></div>
         <button class="btn btn-ghost" style="padding:2px 8px;font-size:10px" title="Open current directory as Course Viewer" onclick="DirBrowser._openAsViewer('${data.path || ''}')">▶ Open as Viewer</button>
@@ -4793,10 +4795,56 @@ const CourseDir = {
     }
   },
 
-  _openZipEntry(zipRel, innerPath) {
-    const url  = '/api/zip-extract?zip=' + encodeURIComponent(zipRel) + '&entry=' + encodeURIComponent(innerPath);
-    const name = innerPath.split('/').pop();
-    TabManager.openTab(url, name, 'custom', this._activeIdx >= 0 ? this._activeIdx : null);
+  async _openZipEntry(zipRel, innerPath) {
+    const name  = innerPath.split('/').pop();
+    const ext   = (name.split('.').pop() || '').toLowerCase();
+    const chIdx = this._activeIdx >= 0 ? this._activeIdx : null;
+    const encZ  = encodeURIComponent(zipRel);
+    const encE  = encodeURIComponent(innerPath);
+    const serveUrl = `/api/zip-serve?zip=${encZ}&entry=${encE}`;
+
+    if (ext === 'srt' || ext === 'vtt') {
+      const text = await fetch(serveUrl).then(r => r.ok ? r.text() : null).catch(() => null);
+      if (!text) { toast('Could not read subtitle file'); return; }
+      this._openSubtitleViewerFromText(text, name.replace(/\.(srt|vtt)$/i, ''), chIdx, null);
+      return;
+    }
+    // All other types: PDF/HTML/TXT served raw; DOCX/RTF converted to HTML by server
+    TabManager.openTab(serveUrl, name, 'custom', chIdx);
+  },
+
+  _openSubtitleViewerFromText(text, title, chapterIdx, videoEntry) {
+    const tabId = 'subv_' + btoa(unescape(encodeURIComponent(title + (chapterIdx ?? ''))).slice(0,20)).replace(/[^a-zA-Z0-9]/g,'').slice(0,20);
+    if (TabManager.tabs.find(t => t.id === tabId)) { TabManager.switchTo(tabId); return; }
+    const cues = this._parseSrt(text);
+    const tab  = { id: tabId, title: '📄 ' + title + ' (subs)', url: '', type: 'subtitle-viewer', chapterIdx: chapterIdx ?? null, scrollY: 0 };
+    TabManager.tabs.push(tab);
+    const container = document.getElementById('reader-frames-container');
+    const div = document.createElement('div');
+    div.id = `reader-frame-${tabId}`;
+    div.className = 'cv-pane';
+    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;font-size:13px;padding:12px 16px';
+    const entryJson = videoEntry ? JSON.stringify(videoEntry).replace(/"/g, '&quot;') : null;
+    const cueHtml = cues.map(c => {
+      const h = Math.floor(c.time/3600), m = Math.floor((c.time%3600)/60), s = c.time%60;
+      const ts = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+      const clickAttr = entryJson ? `onclick="Video._seekOnLoad=${c.time};Video._playAfterSeek=true;Video.load(${entryJson})" style="cursor:pointer"` : '';
+      return `<div ${clickAttr} style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
+                   onmouseover="this.style.background='rgba(124,140,248,.12)'" onmouseout="this.style.background=''">
+        <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
+        <span style="line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+      </div>`;
+    }).join('');
+    div.innerHTML = `<div class="cv-pane-muted" style="margin-bottom:10px;font-size:11px;border-bottom:1px solid #2d3154;padding-bottom:8px">
+      <span>${cues.length} cues</span>
+      ${entryJson ? '<span style="color:#7c8cf8;margin-left:8px">· click timestamp to seek video</span>' : ''}
+    </div>${cueHtml}`;
+    container.appendChild(div);
+    TabManager.activeId = tabId;
+    TabManager._renderTabBar();
+    TabManager._applyActiveTab();
+    TabManager.updateFilterBar();
+    TabManager._save();
   },
 
   // Open a subtitle viewer tab directly from a full .srt/.vtt path
