@@ -329,6 +329,11 @@
     font-size: 14px; line-height: 1.7;
   }
   html.light .markdown-viewer { background: #f8fafc; color: #1e293b; }
+  /* Shared class for div-based viewer panes (zip, subtitle, dir-browser, image-grid) */
+  .cv-pane { background: #0f1117; color: #e2e8f0; }
+  html.light .cv-pane { background: #ffffff; color: #1e293b; }
+  .cv-pane-muted { color: #94a3b8; }
+  html.light .cv-pane-muted { color: #64748b; }
   .markdown-viewer h1,.markdown-viewer h2,.markdown-viewer h3,.markdown-viewer h4 { color: #e2e8f0; margin: 1em 0 .4em; font-weight: 700; }
   html.light .markdown-viewer h1, html.light .markdown-viewer h2, html.light .markdown-viewer h3, html.light .markdown-viewer h4 { color: #1e293b; }
   .markdown-viewer h1 { font-size: 1.6em; border-bottom: 1px solid #2d3154; padding-bottom: .3em; }
@@ -1224,7 +1229,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.5';
+const APP_VERSION = '1.1.6';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1609,7 +1614,8 @@ const TabManager = {
     if (!container) return null;
     const div = document.createElement('div');
     div.id = `reader-frame-${tab.id}`;
-    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;padding:12px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start';
+    div.className = 'cv-pane';
+    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;padding:12px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start';
     div.innerHTML = (tab.images || []).map(img => `<img src="${encodeURIComponent(img).replace(/%2F/g,'/')}" onclick="ImageViewer.open(this.src)" style="height:120px;width:auto;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:border-color .15s" onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='transparent'" alt="${img}">`).join('');
     container.appendChild(div);
     return div;
@@ -3806,7 +3812,8 @@ const DirBrowser = {
       if (container) {
         const div = document.createElement('div');
         div.id = `reader-frame-${this._tabId}`;
-        div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;color:#e2e8f0;font-size:12px;font-family:monospace';
+        div.className = 'cv-pane';
+        div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;font-size:12px;font-family:monospace';
         container.appendChild(div);
       }
       TabManager._applyActiveTab();
@@ -4634,7 +4641,8 @@ const CourseDir = {
     const container = document.getElementById('reader-frames-container');
     const div = document.createElement('div');
     div.id = `reader-frame-${tabId}`;
-    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;padding:12px';
+    div.className = 'cv-pane';
+    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;padding:12px';
     div.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">${
       entries.map(v => {
         const enc = v.localFile.split('/').map(encodeURIComponent).join('/');
@@ -4760,8 +4768,9 @@ const CourseDir = {
     const container = document.getElementById('reader-frames-container');
     const div = document.createElement('div');
     div.id = `reader-frame-${tabId}`;
-    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;color:#e2e8f0;font-size:12px;padding:12px';
-    div.innerHTML = '<div style="color:#64748b">Loading ZIP…</div>';
+    div.className = 'cv-pane';
+    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;font-size:12px;padding:12px';
+    div.innerHTML = '<div class="cv-pane-muted">Loading ZIP…</div>';
     container.appendChild(div);
     TabManager._applyActiveTab();
     TabManager._save();
@@ -4771,11 +4780,11 @@ const CourseDir = {
       if (!r.ok) throw new Error('Failed');
       const { files } = await r.json();
       div.innerHTML = `
-        <div style="font-weight:600;margin-bottom:10px;color:#94a3b8">${zipName} &mdash; ${files.length} file${files.length !== 1 ? 's' : ''}</div>
+        <div class="cv-pane-muted" style="font-weight:600;margin-bottom:10px;font-size:12px">${zipName} &mdash; ${files.length} file${files.length !== 1 ? 's' : ''}</div>
         ${files.map(f => `
           <div class="file-item" style="margin-bottom:2px"
                onclick="CourseDir._openZipEntry(${JSON.stringify(zipRel)}, ${JSON.stringify(f)})">
-            <i data-lucide="file" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
+            <i data-lucide="file" size="13" style="flex-shrink:0"></i>
             <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f}">${f}</span>
           </div>`).join('')}`;
       lucide.createIcons();
@@ -4833,7 +4842,8 @@ const CourseDir = {
       const container = document.getElementById('reader-frames-container');
       const div = document.createElement('div');
       div.id = `reader-frame-${tabId}`;
-      div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;color:#e2e8f0;font-size:13px;padding:12px 16px';
+      div.className = 'cv-pane';
+      div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;font-size:13px;padding:12px 16px';
       const entryJson = vEntry ? JSON.stringify(vEntry).replace(/"/g, '&quot;') : null;
       const cueHtml = cues.map(c => {
         const h = Math.floor(c.time / 3600), m = Math.floor((c.time % 3600) / 60), s = c.time % 60;
@@ -4892,7 +4902,8 @@ const CourseDir = {
         const container = document.getElementById('reader-frames-container');
         const div = document.createElement('div');
         div.id = `reader-frame-${tabId}`;
-        div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;color:#e2e8f0;font-size:13px;padding:12px 16px';
+        div.className = 'cv-pane';
+      div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;font-size:13px;padding:12px 16px';
 
         const cueHtml = cues.map(c => {
           const h = Math.floor(c.time / 3600);
