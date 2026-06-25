@@ -235,6 +235,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._zip_list()
         elif self.path.startswith('/api/zip-extract'):
             self._zip_extract()
+        elif self.path.startswith('/api/epub-html'):
+            self._epub_html()
+        elif self.path.startswith('/api/docx-html'):
+            self._docx_html()
+        elif self.path.startswith('/api/search'):
+            self._search()
+        elif self.path.startswith('/api/file-content'):
+            self._file_content()
+        elif self.path.startswith('/api/check-version'):
+            self._check_version()
+        elif self.path.startswith('/api/self-update'):
+            self._self_update()
         else:
             self._static()
 
@@ -278,7 +290,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _course_structure(self):
         import re
         VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.webm', '.m4v', '.mov'}
-        DOC_EXTS   = {'.pdf', '.md', '.html', '.htm', '.epub', '.txt', '.zip'}
+        DOC_EXTS   = {'.pdf', '.md', '.html', '.htm', '.epub', '.txt', '.zip', '.docx', '.doc', '.rtf'}
         EXCL_NAMES = {
             'course-viewer.html', 'proxy.py', 'start.bat', 'start.sh',
             'index.html', 'readme.md', 'demo.html', 'course-viewer.config.json',
@@ -308,19 +320,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if m:
                 groups.setdefault(m.group(1), []).append(fname)
 
+        SUB_EXTS = {'.srt', '.vtt'}
+
+        def _has_sub(base_path):
+            for se in SUB_EXTS:
+                if os.path.isfile(base_path + se):
+                    return True
+                # language-coded: base.en.srt, base.de.srt, etc.
+                import glob as _glob
+                if _glob.glob(base_path + '.*' + se):
+                    return True
+            return False
+
         if len(groups) >= 2:
             chapters = []
             for pfx in sorted(groups, key=lambda x: int(x)):
                 files  = sorted(groups[pfx])
-                videos = [{'name': f, 'rel': f}
-                          for f in files if os.path.splitext(f)[1].lower() in VIDEO_EXTS]
+                videos = []
+                for f in files:
+                    if os.path.splitext(f)[1].lower() not in VIDEO_EXTS:
+                        continue
+                    base = os.path.join(STATIC_DIR, os.path.splitext(f)[0])
+                    videos.append({'name': f, 'rel': f, 'hasSub': _has_sub(base)})
                 docs   = [{'name': f, 'rel': f}
                           for f in files if os.path.splitext(f)[1].lower() in DOC_EXTS]
                 if not videos and not docs:
                     continue
                 src   = videos[0]['name'] if videos else docs[0]['name']
                 title = os.path.splitext(src)[0]
-                chapters.append({'title': title, 'videos': videos, 'docs': docs, 'subpath': None})
+                chapters.append({'title': title, 'videos': videos, 'docs': docs,
+                                 'subpath': None, 'hasSubs': False})
             if chapters:
                 result = {'pattern': 'flat-prefix', 'chapters': chapters}
 
@@ -329,22 +358,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for sub in subdirs:
                 sub_abs = os.path.join(STATIC_DIR, sub)
                 try:
-                    sub_files = sorted(os.listdir(sub_abs), key=str.lower)
+                    sub_entries = sorted(os.listdir(sub_abs), key=str.lower)
                 except Exception:
-                    sub_files = []
+                    sub_entries = []
                 videos, docs = [], []
-                for f in sub_files:
+                has_subsubs = False
+                for f in sub_entries:
                     if f.startswith('.') or f.startswith('_'):
+                        continue
+                    full = os.path.join(sub_abs, f)
+                    if os.path.isdir(full):
+                        has_subsubs = True
                         continue
                     ext = os.path.splitext(f)[1].lower()
                     rel = sub + '/' + f
-                    if not os.path.isfile(os.path.join(sub_abs, f)):
-                        continue
                     if ext in VIDEO_EXTS:
-                        videos.append({'name': f, 'rel': rel})
+                        base = os.path.join(sub_abs, os.path.splitext(f)[0])
+                        videos.append({'name': f, 'rel': rel, 'hasSub': _has_sub(base)})
                     elif ext in DOC_EXTS:
                         docs.append({'name': f, 'rel': rel})
-                chapters.append({'title': sub, 'videos': videos, 'docs': docs, 'subpath': sub})
+                chapters.append({'title': sub, 'videos': videos, 'docs': docs,
+                                 'subpath': sub, 'hasSubs': has_subsubs})
             if chapters:
                 result = {'pattern': 'subdirectory', 'chapters': chapters}
 
@@ -378,15 +412,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         try:
             with zipfile.ZipFile(absp) as zf:
-                data = zf.read(entry)
-            ext  = os.path.splitext(entry)[1].lower()
-            mime = MIME_MAP.get(ext, mimetypes.guess_type(entry)[0] or 'application/octet-stream')
+                names = zf.namelist()
+                entry_norm = entry.replace('\\', '/')
+                # 1. Exact match
+                actual = entry_norm if entry_norm in names else None
+                # 2. Case-insensitive full-path match
+                if actual is None:
+                    el = entry_norm.lower()
+                    matches = [n for n in names if not n.endswith('/') and n.lower() == el]
+                    if matches: actual = matches[0]
+                # 3. Same basename anywhere in ZIP
+                if actual is None:
+                    bn = entry_norm.rsplit('/', 1)[-1].lower()
+                    matches = [n for n in names if not n.endswith('/') and n.rsplit('/', 1)[-1].lower() == bn]
+                    if matches: actual = matches[0]
+                if actual is None:
+                    self.send_error(404, 'Entry not found in ZIP')
+                    return
+                data = zf.read(actual)
+            ext  = os.path.splitext(actual)[1].lower()
+            mime = MIME_MAP.get(ext, mimetypes.guess_type(actual)[0] or 'application/octet-stream')
             self.send_response(200)
             self.send_header('Content-Type', mime)
             self.send_header('Content-Length', str(len(data)))
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Content-Disposition',
-                             f'inline; filename="{os.path.basename(entry)}"')
+                             f'inline; filename="{os.path.basename(actual)}"')
             self.end_headers()
             if self.command != 'HEAD':
                 self.wfile.write(data)
@@ -394,6 +445,181 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(404, 'Entry not found in ZIP')
         except Exception as e:
             self.send_error(500, str(e))
+
+    # ─── EPUB viewer: extract + concatenate HTML content ─────────────────────
+    def _epub_html(self):
+        import zipfile, re as _re
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        rel    = urllib.parse.unquote(params.get('path', [''])[0])
+        absp   = os.path.normpath(os.path.join(STATIC_DIR, rel))
+        if not absp.startswith(STATIC_DIR) or not os.path.isfile(absp):
+            self.send_error(404)
+            return
+
+        try:
+            with zipfile.ZipFile(absp) as zf:
+                names = zf.namelist()
+                name_set = set(names)
+                # basename.lower() → first actual path (for fallback when path doesn't resolve)
+                bn_map: dict = {}
+                for _n in names:
+                    if not _n.endswith('/'):
+                        _bn = _n.rsplit('/', 1)[-1].lower()
+                        if _bn not in bn_map:
+                            bn_map[_bn] = _n
+
+                def _rewrite_assets(content, base_dir, epub_rel):
+                    """Rewrite relative src/href URLs to /api/zip-extract; verify against ZIP."""
+                    def resolve(url):
+                        if _re.match(r'(https?:|data:|#|/)', url):
+                            return None
+                        path = (base_dir + '/' + url) if base_dir else url
+                        segs = []
+                        for seg in path.split('/'):
+                            if seg == '..':
+                                if segs: segs.pop()
+                            elif seg and seg != '.':
+                                segs.append(seg)
+                        resolved = '/'.join(segs)
+                        # Verify the path actually exists in the ZIP
+                        if resolved not in name_set:
+                            bn = resolved.rsplit('/', 1)[-1].lower()
+                            resolved = bn_map.get(bn, resolved)
+                        return resolved
+                    def replace(m):
+                        attr, url = m.group(1), m.group(3)
+                        q = m.group(2)
+                        resolved = resolve(url)
+                        if resolved is None:
+                            return m.group(0)
+                        new_url = ('/api/zip-extract?zip=' + urllib.parse.quote(epub_rel, safe='')
+                                   + '&entry=' + urllib.parse.quote(resolved, safe=''))
+                        return f'{attr}={q}{new_url}{q}'
+                    return _re.sub(r'(src|href)=(["\'])([^"\']+)\2', replace, content)
+
+                content_files = sorted(
+                    [n for n in names
+                     if _re.search(r'\.(html|htm|xhtml)$', n, _re.I)
+                     and 'META-INF' not in n
+                     and 'toc' not in n.lower()],
+                    key=lambda x: x
+                )
+                if not content_files:
+                    self.send_error(404, 'No HTML content in EPUB')
+                    return
+                parts = []
+                for cf in content_files:
+                    try:
+                        raw = zf.read(cf).decode('utf-8', errors='replace')
+                        m = _re.search(r'<body[^>]*>(.*?)</body>', raw, _re.DOTALL | _re.I)
+                        content = m.group(1) if m else raw
+                        base_dir = cf.rsplit('/', 1)[0] if '/' in cf else ''
+                        content = _rewrite_assets(content, base_dir, rel)
+                        parts.append(content)
+                    except Exception:
+                        pass
+            title = os.path.splitext(os.path.basename(rel))[0]
+            combined = '\n<hr style="border:none;border-top:1px solid rgba(255,255,255,.1);margin:2em 0">\n'.join(parts)
+            doc = (
+                '<!DOCTYPE html><html><head><meta charset="utf-8">'
+                f'<title>{title}</title>'
+                '<style>'
+                'body{font-family:Georgia,serif;max-width:720px;margin:0 auto;padding:24px;line-height:1.7;background:#0f1117;color:#e2e8f0}'
+                'html.light body{background:#fff;color:#1a1a1a}'
+                'img{max-width:100%}'
+                'h1,h2,h3{color:#a5b4fc} html.light h1,html.light h2,html.light h3{color:#312e81}'
+                'a{color:#7c8cf8} html.light a{color:#4338ca}'
+                'hr{border:none;border-top:1px solid rgba(255,255,255,.12)} html.light hr{border-top-color:rgba(0,0,0,.12)}'
+                '</style>'
+                # Sync parent document's html class (light/dark) into this iframe — same origin
+                '<script>(function(){'
+                'function sync(){try{document.documentElement.className=parent.document.documentElement.className;}catch(e){}}'
+                'sync();'
+                'try{new MutationObserver(sync).observe(parent.document.documentElement,{attributes:true,attributeFilter:["class"]});}catch(e){}'
+                '})();</script>'
+                '</head>'
+                f'<body>{combined}</body></html>'
+            )
+            data = doc.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            if self.command != 'HEAD':
+                self.wfile.write(data)
+        except Exception as e:
+            self.send_error(500, str(e))
+
+    # ─── DOCX / DOC / RTF → HTML viewer ──────────────────────────────────────
+    def _docx_html(self):
+        import re as _re, zipfile
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        rel    = urllib.parse.unquote(params.get('path', [''])[0])
+        absp   = os.path.normpath(os.path.join(STATIC_DIR, rel))
+        if not absp.startswith(STATIC_DIR) or not os.path.isfile(absp):
+            self.send_error(404); return
+        ext = os.path.splitext(absp)[1].lower()
+        title = os.path.splitext(os.path.basename(rel))[0]
+        try:
+            if ext in {'.docx', '.doc'}:
+                try:
+                    import mammoth
+                    with open(absp, 'rb') as fh:
+                        result = mammoth.convert_to_html(fh)
+                    html_body = result.value
+                except ImportError:
+                    # Fallback: extract raw text from docx XML
+                    try:
+                        with zipfile.ZipFile(absp) as zf:
+                            if 'word/document.xml' in zf.namelist():
+                                xml = zf.read('word/document.xml').decode('utf-8', errors='replace')
+                                text = _re.sub(r'<[^>]+>', ' ', xml)
+                                text = _re.sub(r'\s+', ' ', text).strip()
+                                html_body = (f'<div style="color:#fbbf24;font-size:11px;margin-bottom:12px">'
+                                             f'⚠ Install mammoth (<code>pip install mammoth</code>) for rich rendering</div>'
+                                             f'<pre style="white-space:pre-wrap;font-family:inherit">{text[:80000]}</pre>')
+                            else:
+                                html_body = '<p style="color:#f87171">Cannot read file — not a valid DOCX.</p>'
+                    except Exception as e2:
+                        html_body = f'<p style="color:#f87171">Error reading file: {e2}</p>'
+            elif ext == '.rtf':
+                with open(absp, encoding='utf-8', errors='replace') as fh:
+                    raw = fh.read()
+                # Best-effort RTF stripping (no dependencies)
+                text = _re.sub(r'\\[a-z]+\-?\d*[ ]?', ' ', raw)
+                text = _re.sub(r'[{}]', '', text)
+                text = _re.sub(r'\\[^a-z]', '', text)
+                text = _re.sub(r'\s+', ' ', text).strip()[:80000]
+                html_body = f'<pre style="white-space:pre-wrap;font-family:inherit">{text}</pre>'
+            else:
+                html_body = '<p style="color:#f87171">Unsupported format.</p>'
+        except Exception as e:
+            html_body = f'<p style="color:#f87171">Error: {e}</p>'
+
+        doc = (
+            '<!DOCTYPE html><html><head><meta charset="utf-8">'
+            f'<title>{title}</title>'
+            '<style>'
+            'body{font-family:Georgia,serif;max-width:800px;margin:0 auto;padding:24px;line-height:1.7;background:#0f1117;color:#e2e8f0}'
+            'html.light body{background:#fff;color:#1a1a1a}'
+            'h1,h2,h3{color:#a5b4fc} html.light h1,html.light h2,html.light h3{color:#312e81}'
+            'img{max-width:100%} table{border-collapse:collapse;width:100%} td,th{border:1px solid #2d3154;padding:6px}'
+            '</style>'
+            '<script>(function(){function sync(){try{document.documentElement.className=parent.document.documentElement.className;}catch(e){}}'
+            'sync();try{new MutationObserver(sync).observe(parent.document.documentElement,{attributes:true,attributeFilter:["class"]});}catch(e){}'
+            '})();</script>'
+            '</head>'
+            f'<body>{html_body}</body></html>'
+        )
+        data = doc.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        if self.command != 'HEAD':
+            self.wfile.write(data)
 
     # ─── List directory contents for the directory browser ────────────────────
     def _list_directory(self):
@@ -732,7 +958,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         ext = os.path.splitext(filepath)[1].lower()
         mp4_data = None
-        if ext in ('.mp4', '.m4v', '.mov'):
+        # HEAD requests only need Content-Length — skip expensive moov relocation
+        if ext in ('.mp4', '.m4v', '.mov') and self.command != 'HEAD':
             mp4_data = _get_mp4_content(filepath)
 
         try:
@@ -895,6 +1122,160 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(e.code, str(e.reason))
         except Exception as e:
             self.send_error(502, str(e))
+
+    # ─── Full-text search (SRT cues + text files) ────────────────────────────
+    def _check_version(self):
+        import urllib.request as _urlreq
+        try:
+            req = _urlreq.Request(
+                'https://api.github.com/repos/patchamama/Course-viewer/releases/latest',
+                headers={'User-Agent': 'CourseViewer/1.0'}
+            )
+            with _urlreq.urlopen(req, timeout=5) as r:
+                data = json.loads(r.read())
+            latest = data.get('tag_name', '').lstrip('v')
+            html_path = os.path.join(APP_DIR, 'course-viewer.html')
+            local = '0'
+            if os.path.isfile(html_path):
+                with open(html_path, encoding='utf-8', errors='ignore') as f:
+                    m = re.search(r"APP_VERSION\s*=\s*'([0-9][0-9.]*)'", f.read())
+                    if m: local = m.group(1)
+            def _ver_gt(a, b):
+                av = [int(x) for x in a.split('.')]
+                bv = [int(x) for x in b.split('.')]
+                return av > bv
+            has_update = bool(latest) and _ver_gt(latest, local)
+            self._json({'hasUpdate': has_update, 'latestVersion': latest, 'currentVersion': local})
+        except Exception as e:
+            self._json({'hasUpdate': False, 'latestVersion': '', 'currentVersion': '', 'error': str(e)})
+
+    def _self_update(self):
+        import urllib.request as _urlreq
+        GITHUB_RAW = 'https://raw.githubusercontent.com/patchamama/Course-viewer/main'
+        updated, errors = [], []
+        for fname in ['proxy.py', 'course-viewer.html']:
+            target = os.path.join(APP_DIR, fname)
+            try:
+                req = _urlreq.Request(f'{GITHUB_RAW}/{fname}',
+                                      headers={'User-Agent': 'CourseViewer/1.0'})
+                with _urlreq.urlopen(req, timeout=30) as r:
+                    content = r.read()
+                with open(target, 'wb') as f:
+                    f.write(content)
+                updated.append(fname)
+            except Exception as e:
+                errors.append(f'{fname}: {str(e)}')
+        self._json({'updated': updated, 'errors': errors, 'ok': len(errors) == 0})
+
+    def _search(self):
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        q = params.get('q', [''])[0].strip().lower()
+        if not q:
+            self._json({'query': q, 'results': []}); return
+        path_filter = params.get('path', [''])[0].strip('/')
+        if path_filter:
+            scan_root = os.path.normpath(os.path.join(STATIC_DIR, path_filter))
+            if not scan_root.startswith(os.path.normpath(STATIC_DIR)):
+                scan_root = STATIC_DIR
+        else:
+            scan_root = STATIC_DIR
+        try:
+            max_depth = max(0, min(10, int(params.get('depth', ['3'])[0])))
+        except (ValueError, TypeError):
+            max_depth = 3
+        SRT_EXTS  = {'.srt', '.vtt'}
+        TEXT_EXTS = {'.txt', '.md', '.html', '.htm', '.js', '.json', '.xml', '.php', '.py'}
+        ALL_EXTS  = SRT_EXTS | TEXT_EXTS
+        MAX_FILE  = 3 * 1024 * 1024
+        results   = []
+        scan_root_depth = scan_root.rstrip(os.sep).count(os.sep)
+        for root, dirs, files in os.walk(scan_root):
+            cur_depth = root.rstrip(os.sep).count(os.sep) - scan_root_depth
+            if cur_depth >= max_depth:
+                dirs[:] = []  # don't recurse deeper
+            else:
+                dirs[:] = sorted(
+                    [d for d in dirs if not d.startswith('.') and not d.startswith('_')],
+                    key=str.lower
+                )
+            # Folder name matches
+            for dname in dirs:
+                if q in dname.lower():
+                    rel = os.path.relpath(os.path.join(root, dname), STATIC_DIR).replace('\\', '/')
+                    results.append({'file': rel, 'type': 'folder', 'matches': [{'text': dname}]})
+                    if len(results) >= 50: break
+            for fname in sorted(files, key=str.lower):
+                if fname.startswith('.') or fname.startswith('_'):
+                    continue
+                ext = os.path.splitext(fname)[1].lower()
+                fpath = os.path.join(root, fname)
+                rel_name = os.path.relpath(fpath, STATIC_DIR).replace('\\', '/')
+                # Filename match (all file types) — prepend so name hits appear first
+                if q in fname.lower() and not any(r['file'] == rel_name and r['type'] == 'filename' for r in results):
+                    results.append({'file': rel_name, 'type': 'filename', 'matches': [{'text': fname}]})
+                    if len(results) >= 50: break
+                if ext not in ALL_EXTS:
+                    continue
+                try:
+                    if os.path.getsize(fpath) > MAX_FILE:
+                        continue
+                    with open(fpath, encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                except Exception:
+                    continue
+                rel = os.path.relpath(fpath, STATIC_DIR).replace('\\', '/')
+                if ext in SRT_EXTS:
+                    matches = []
+                    for block in re.split(r'\n\s*\n', content):
+                        lines = block.strip().splitlines()
+                        time_line, text_start = None, 0
+                        for i, line in enumerate(lines):
+                            if '-->' in line:
+                                time_line = line; text_start = i + 1; break
+                        if not time_line:
+                            continue
+                        cue_text = ' '.join(lines[text_start:]).strip()
+                        if q not in cue_text.lower():
+                            continue
+                        tm = re.match(r'(\d{1,2}):(\d{2}):(\d{2})[,.]', time_line)
+                        secs = (int(tm.group(1))*3600 + int(tm.group(2))*60 + int(tm.group(3))) if tm else 0
+                        matches.append({'time': secs, 'text': cue_text[:300]})
+                        if len(matches) >= 30:
+                            break
+                    if matches:
+                        results.append({'file': rel, 'type': 'srt', 'matches': matches})
+                else:
+                    matches = []
+                    for i, line in enumerate(content.splitlines()):
+                        if q in line.lower():
+                            matches.append({'line': i + 1, 'text': line.strip()[:300]})
+                            if len(matches) >= 20:
+                                break
+                    if matches:
+                        results.append({'file': rel, 'type': ext.lstrip('.'), 'matches': matches})
+                if len(results) >= 50:
+                    break
+        self._json({'query': q, 'results': results})
+
+    # ─── Raw file content for code viewer ────────────────────────────────────
+    def _file_content(self):
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        rel = urllib.parse.unquote(params.get('path', [''])[0]).strip('/')
+        if not rel:
+            self.send_error(400, 'Missing path'); return
+        absp = os.path.normpath(os.path.join(STATIC_DIR, rel))
+        if not absp.startswith(os.path.normpath(STATIC_DIR) + os.sep) and absp != os.path.normpath(STATIC_DIR):
+            self.send_error(403, 'Access denied'); return
+        if not os.path.isfile(absp):
+            self.send_error(404, 'Not found'); return
+        if os.path.getsize(absp) > 2 * 1024 * 1024:
+            self.send_error(413, 'File too large'); return
+        try:
+            with open(absp, encoding='utf-8', errors='replace') as f:
+                content = f.read()
+            self._json({'path': rel, 'content': content})
+        except Exception as e:
+            self.send_error(500, str(e))
 
     def log_message(self, fmt, *args):
         if args and (str(args[1]).startswith('5') or '/proxy/' in str(args[0])):

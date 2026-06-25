@@ -128,6 +128,37 @@
   #main-layout:not(.vertical) #resizer { width: var(--resizer-size); cursor: col-resize; }
   #main-layout.vertical #resizer { height: var(--resizer-size); cursor: row-resize; }
 
+  /* Course Directory chapter list */
+  .cdir-b { width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;border:2px solid #2d3154;color:#64748b;background:transparent;transition:background .15s,border-color .15s }
+  .cdir-b-done { border-color:#3b4fd8;background:#3b4fd8;color:#fff }
+  .cdir-b-active { border-color:#7c8cf8;background:#7c8cf8;color:#fff }
+  .cdir-title { font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f1f5f9 }
+  .cdir-title.done { color:#a5b4fc }
+  .cdir-title.cdir-active { color:#c4b5fd;font-weight:700 }
+  html.light .cdir-title { color:#1e293b }
+  html.light .cdir-title.done { color:#4f46e5 }
+  html.light .cdir-title.cdir-active { color:#4338ca }
+
+  /* Reader document type filter bar */
+  #reader-filter-bar { flex-shrink:0;padding:4px 8px;gap:5px;background:#0a0d1a;border-bottom:1px solid #2d3154;overflow-x:auto;display:none;align-items:center }
+  #reader-filter-bar::-webkit-scrollbar { display:none }
+  .filter-pill { border:1px solid #2d3154;border-radius:10px;padding:2px 9px;font-size:10px;cursor:pointer;background:transparent;color:#64748b;white-space:nowrap;transition:all .15s }
+  .filter-pill:hover { border-color:#7c8cf8;color:#e2e8f0 }
+  .filter-pill.active { background:#3b4fd8;color:#fff;border-color:#3b4fd8 }
+
+  /* Panel C resizer (always horizontal — Course Dir is always a left column) */
+  #resizer-c {
+    flex: none;
+    background: #2d3154;
+    transition: background .15s;
+    width: var(--resizer-size);
+    cursor: col-resize;
+    position: relative;
+    z-index: 10;
+    display: none;
+  }
+  #resizer-c:hover, #resizer-c.dragging { background: #3b4fd8; }
+
   /* ── Video area ── */
   #video-wrapper {
     position: relative;
@@ -539,8 +570,22 @@
   .input-row { display: flex; gap: 6px; align-items: center; }
   .input-row input, .input-row select { flex: 1; }
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
 </head>
 <body>
+
+<!-- App loading overlay — hidden once init() completes -->
+<div id="app-loading-overlay" style="position:fixed;inset:0;z-index:9999;background:#0a0c1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .4s">
+  <div style="width:36px;height:36px;border:3px solid #2d3154;border-top-color:#7c8cf8;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+  <div style="font-size:12px;color:#64748b;letter-spacing:.5px">Loading…</div>
+</div>
 
 <!-- ═══════════════════ HEADER ═══════════════════ -->
 <header id="app-header">
@@ -592,6 +637,21 @@
     <i data-lucide="share-2" size="16"></i>
   </button>
 
+  <div class="hdr-sep"></div>
+
+  <button class="hdr-btn" title="Global search (subtitles &amp; documents)" onclick="GlobalSearch.open()">
+    <i data-lucide="search" size="16"></i>
+  </button>
+
+  <div class="hdr-sep"></div>
+
+  <a href="https://github.com/patchamama/Course-viewer/releases" target="_blank" rel="noopener" class="hdr-btn" title="Download latest release" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:#e2e8f0">
+    <i data-lucide="package" size="16"></i>
+  </a>
+  <button id="btn-update-app" class="hdr-btn" title="Update available — click to install" style="display:none;color:#f59e0b" onclick="AppUpdater.update()">
+    <i data-lucide="refresh-cw" size="16"></i>
+  </button>
+
   <div style="flex:1"></div>
 
   <!-- Fullscreen -->
@@ -617,6 +677,25 @@
 
 <div id="main-layout">
 
+  <!-- ─── PANEL C (Course Directory — shown when pattern detected) ─── -->
+  <div class="panel" id="panel-c" style="display:none;width:240px;flex-shrink:0">
+    <div id="panel-c-restore" style="display:none;position:absolute;inset:0;z-index:10;cursor:pointer;flex-direction:column;align-items:center;justify-content:center;background:#151829;border-right:1px solid #2d3154" onclick="PanelC.toggleMinimize()" title="Restore panel">
+      <i data-lucide="chevron-right" size="18" style="color:#7c8cf8"></i>
+    </div>
+    <div class="panel-header">
+      <i data-lucide="list-ordered" size="14"></i>
+      <span>Course Dir</span>
+      <div style="flex:1"></div>
+      <button class="hdr-btn" style="width:26px;height:26px;flex-shrink:0" title="Minimize panel" onclick="PanelC.toggleMinimize()">
+        <i data-lucide="panel-left-close" size="13"></i>
+      </button>
+    </div>
+    <div class="panel-body" id="panel-c-body" style="padding:8px;gap:4px">
+      <div id="coursedir-list"></div>
+    </div>
+  </div>
+  <div id="resizer-c" style="display:none"></div>
+
   <!-- ─── PANEL A (video by default) ─── -->
   <div class="panel" id="panel-a">
     <div id="panel-a-restore" style="display:none;position:absolute;inset:0;z-index:10;cursor:pointer;flex-direction:column;align-items:center;justify-content:center;background:#151829;border-right:1px solid #2d3154" onclick="PanelA.toggleMinimize()" title="Restore panel">
@@ -632,7 +711,7 @@
       <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Video.openLocalModal()" title="Open local video file">
         <i data-lucide="folder-open" size="12"></i> Local
       </button>
-      <button id="btn-course-dir" class="btn btn-ghost" style="padding:2px 8px;font-size:11px;display:none" onclick="CourseDir.toggle()" title="Show course structure">
+      <button id="btn-course-dir" class="btn btn-ghost" style="padding:2px 8px;font-size:11px;display:none" onclick="PanelC.toggleMinimize()" title="Toggle course directory">
         <i data-lucide="list-ordered" size="12"></i> Course Dir
       </button>
       <button class="hdr-btn" id="btn-panela-minimize" style="width:26px;height:26px;flex-shrink:0" title="Minimize / restore panel" onclick="PanelA.toggleMinimize()">
@@ -651,6 +730,18 @@
           <div id="subtitle-overlay" style="display:none"></div>
         </div>
         <div id="video-resize-handle" title="Drag to resize video height"></div>
+        <!-- Playback speed control -->
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#0f1117;border-top:1px solid #1e2947;flex-wrap:wrap">
+          <span style="font-size:10px;color:#64748b;flex-shrink:0">Speed</span>
+          <div style="display:flex;gap:3px;flex-wrap:wrap">
+            <button class="spd-btn" data-rate="0.5" onclick="Video.setSpeed(0.5)" style="font-size:10px;padding:1px 5px;border:1px solid #2d3154;border-radius:4px;background:transparent;color:#94a3b8;cursor:pointer">0.5×</button>
+            <button class="spd-btn" data-rate="0.75" onclick="Video.setSpeed(0.75)" style="font-size:10px;padding:1px 5px;border:1px solid #2d3154;border-radius:4px;background:transparent;color:#94a3b8;cursor:pointer">0.75×</button>
+            <button class="spd-btn" data-rate="1" onclick="Video.setSpeed(1)" style="font-size:10px;padding:1px 5px;border:1px solid #7c8cf8;border-radius:4px;background:transparent;color:#a5b4fc;cursor:pointer;font-weight:600">1×</button>
+            <button class="spd-btn" data-rate="1.25" onclick="Video.setSpeed(1.25)" style="font-size:10px;padding:1px 5px;border:1px solid #2d3154;border-radius:4px;background:transparent;color:#94a3b8;cursor:pointer">1.25×</button>
+            <button class="spd-btn" data-rate="1.5" onclick="Video.setSpeed(1.5)" style="font-size:10px;padding:1px 5px;border:1px solid #2d3154;border-radius:4px;background:transparent;color:#94a3b8;cursor:pointer">1.5×</button>
+            <button class="spd-btn" data-rate="2" onclick="Video.setSpeed(2)" style="font-size:10px;padding:1px 5px;border:1px solid #2d3154;border-radius:4px;background:transparent;color:#94a3b8;cursor:pointer">2×</button>
+          </div>
+        </div>
       </div>
 
       <!-- Subtitle controls -->
@@ -699,18 +790,6 @@
               <option value="online-join">Online Join</option>
             </select>
           </div>
-        </div>
-      </div>
-
-      <!-- Course Directory panel (shown when flat-prefix or subdirectory pattern detected) -->
-      <div class="card" id="course-dir-card" style="padding:0;display:none">
-        <div class="section-header" onclick="toggleSection('coursedir')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #2d3154">
-          <i data-lucide="list-ordered" size="13" style="color:#7c8cf8;flex-shrink:0"></i>
-          <span class="section-label" style="margin:0;flex:1">Course Directory</span>
-          <i data-lucide="chevron-right" id="coursedir-icon" size="14" style="color:#64748b;flex-shrink:0"></i>
-        </div>
-        <div id="coursedir-body" style="padding:8px;display:none;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto">
-          <div id="coursedir-list"></div>
         </div>
       </div>
 
@@ -852,16 +931,20 @@
     </div>
     <div class="panel-body" id="panel-b-body" style="padding:0">
       <div id="pw-bar">
-        <i data-lucide="key" size="13"></i>
-        Password: <code id="pw-display"></code>
-        <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="copyPw()">
-          <i data-lucide="copy" size="11"></i> Copy
-        </button>
-        <span style="flex:1"></span>
+        <span id="pw-bar-section" style="display:none;align-items:center;gap:4px">
+          <i data-lucide="key" size="13"></i>
+          Password: <code id="pw-display"></code>
+          <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="copyPw()">
+            <i data-lucide="copy" size="11"></i> Copy
+          </button>
+          <span style="display:inline-block;width:1px;background:#2d3154;height:14px;margin:0 2px"></span>
+        </span>
         <button class="btn btn-ghost" style="padding:1px 7px;font-size:15px;line-height:1.2" onclick="ReaderZoom.change(-0.1)" title="Zoom out">−</button>
         <span id="reader-zoom-level" style="font-size:11px;min-width:32px;text-align:center;color:#94a3b8">100%</span>
         <button class="btn btn-ghost" style="padding:1px 7px;font-size:15px;line-height:1.2" onclick="ReaderZoom.change(0.1)" title="Zoom in">+</button>
         <button class="btn btn-ghost" style="padding:1px 5px;font-size:10px" onclick="ReaderZoom.reset()" title="Reset zoom">1:1</button>
+        <span style="display:inline-block;width:1px;background:#2d3154;height:14px;margin:0 3px"></span>
+        <button class="btn btn-ghost" id="btn-reader-margin" style="padding:1px 6px;font-size:10px" onclick="ReaderMargin.cycle()" title="Reading width: narrow / normal / wide">⇔</button>
         <span style="display:inline-block;width:1px;background:#2d3154;height:14px;margin:0 3px"></span>
         <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px" onclick="Markers.addReading()">
           <i data-lucide="map-pin" size="11"></i> Mark Position
@@ -879,10 +962,16 @@
             <i data-lucide="file" size="11"></i>
             <input type="file" accept=".html,.htm,.pdf" style="display:none" onchange="TabManager.openFileInTab(this)">
           </label>
-          <button id="btn-dir-browser" class="btn btn-ghost" style="padding:2px 5px;flex-shrink:0;display:none" onclick="DirBrowser.openTab()" title="Browse directory">
+          <button id="btn-dir-browser" class="btn btn-ghost" style="padding:2px 5px;flex-shrink:0;display:none" onclick="DirBrowser.openTab(CourseDir._data?.chapters?.[CourseDir._activeIdx]?.subpath||'')" title="Browse current chapter directory">
             <i data-lucide="folder-tree" size="11"></i>
           </button>
+          <button class="btn btn-ghost" style="padding:2px 5px;flex-shrink:0" onclick="TabManager.closeOthers()" title="Close all other tabs">
+            <i data-lucide="panel-left-close" size="11"></i>
+          </button>
         </div>
+      </div>
+      <div id="reader-filter-bar">
+        <!-- type filter pills — injected by TabManager.updateFilterBar() -->
       </div>
       <div id="reader-frames-container">
         <!-- iframes injected by TabManager.init() -->
@@ -969,6 +1058,56 @@
 </div>
 
 <!-- YouTube URL prompt modal -->
+<!-- ═══ GLOBAL SEARCH MODAL ═══ -->
+<div id="global-search-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);align-items:flex-start;justify-content:center;padding-top:60px">
+  <div style="background:#151829;border:1px solid #2d3154;border-radius:10px;width:680px;max-width:94vw;max-height:76vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.6)">
+    <!-- Search input row -->
+    <div style="padding:10px 14px;border-bottom:1px solid #2d3154;display:flex;gap:8px;align-items:center;flex-shrink:0">
+      <i data-lucide="search" size="15" style="color:#7c8cf8;flex-shrink:0"></i>
+      <input id="global-search-input" placeholder="Search subtitles and documents…"
+             style="flex:1;background:none;border:none;outline:none;color:#e2e8f0;font-size:14px;min-width:0"
+             oninput="GlobalSearch.onInput(this.value)"
+             onkeydown="if(event.key==='Escape')GlobalSearch.close()">
+      <span id="global-search-count" style="font-size:10px;color:#64748b;flex-shrink:0"></span>
+      <!-- Depth control -->
+      <span style="font-size:10px;color:#64748b;flex-shrink:0;margin-left:6px">Depth:</span>
+      <select id="gs-depth-select" title="Max subfolder depth to search"
+              onchange="GlobalSearch.setDepth(parseInt(this.value))"
+              style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#94a3b8;font-size:10px;padding:1px 4px;cursor:pointer;flex-shrink:0">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+        <option value="10">All</option>
+      </select>
+      <button onclick="GlobalSearch.close()" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;line-height:1;padding:0 2px;flex-shrink:0;margin-left:4px">×</button>
+    </div>
+    <!-- Pre-filter: document type pills -->
+    <div id="gs-prefilter-bar" style="display:none;padding:6px 12px;border-bottom:1px solid #2d3154;flex-shrink:0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:10px;color:#64748b;flex-shrink:0">Search in:</span>
+      <button id="gsf-all" class="filter-pill active" onclick="GlobalSearch.setPrefilter(null)" style="font-size:10px;padding:1px 7px">All</button>
+      <button id="gsf-srt" class="filter-pill" onclick="GlobalSearch.setPrefilter('srt')" style="font-size:10px;padding:1px 7px;display:flex;align-items:center;gap:3px"><i data-lucide="subtitles" size="10"></i> Subtitles</button>
+      <button id="gsf-pdf" class="filter-pill" onclick="GlobalSearch.setPrefilter('pdf')" style="font-size:10px;padding:1px 7px;display:flex;align-items:center;gap:3px"><i data-lucide="file-down" size="10"></i> PDF</button>
+      <button id="gsf-md" class="filter-pill" onclick="GlobalSearch.setPrefilter('md')" style="font-size:10px;padding:1px 7px;display:flex;align-items:center;gap:3px"><i data-lucide="file-text" size="10"></i> MD</button>
+      <button id="gsf-html" class="filter-pill" onclick="GlobalSearch.setPrefilter('html')" style="font-size:10px;padding:1px 7px;display:flex;align-items:center;gap:3px"><i data-lucide="code-2" size="10"></i> HTML</button>
+      <button id="gsf-txt" class="filter-pill" onclick="GlobalSearch.setPrefilter('txt')" style="font-size:10px;padding:1px 7px;display:flex;align-items:center;gap:3px"><i data-lucide="file" size="10"></i> TXT</button>
+      <button id="gsf-code" class="filter-pill" onclick="GlobalSearch.setPrefilter('code')" style="font-size:10px;padding:1px 7px;display:flex;align-items:center;gap:3px"><i data-lucide="braces" size="10"></i> Code</button>
+    </div>
+    <!-- Progress bar -->
+    <div id="gs-progress" style="height:2px;background:#2d3154;flex-shrink:0;display:none">
+      <div id="gs-progress-bar" style="height:100%;background:#7c8cf8;width:0%;transition:width .3s"></div>
+    </div>
+    <!-- Results type filter (post-search) -->
+    <div id="gs-typefilter-bar" style="display:none;padding:5px 12px;border-bottom:1px solid #2d3154;flex-shrink:0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:10px;color:#64748b">Filter:</span>
+      <span id="gs-type-pills"></span>
+    </div>
+    <div id="global-search-results" style="flex:1;overflow-y:auto;padding:8px">
+      <div style="color:#64748b;font-size:12px;text-align:center;padding:24px">Type to search subtitles and documents…</div>
+    </div>
+  </div>
+</div>
+
 <div id="yt-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
   <div class="card" style="width:380px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:center;gap:8px">
@@ -1085,7 +1224,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.2';
+const APP_VERSION = '1.1.4';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1211,8 +1350,18 @@ const Layout = {
     const pb = document.getElementById('panel-b');
     const pct = this.splitPct;
     if (this.mode === 'horizontal') {
-      pa.style.width = pct + '%'; pa.style.height = '100%';
-      pb.style.width = (100 - pct) + '%'; pb.style.height = '100%';
+      // Subtract Panel C + its resizer so A+B never overflow the viewport
+      const pc = document.getElementById('panel-c');
+      const rc = document.getElementById('resizer-c');
+      const pcW = (pc && pc.offsetWidth > 0) ? pc.offsetWidth + (rc ? rc.offsetWidth : 0) : 0;
+      if (pcW > 0) {
+        pa.style.width = `calc((100% - ${pcW}px) * ${pct / 100})`;
+        pb.style.width = `calc((100% - ${pcW}px) * ${(100 - pct) / 100})`;
+      } else {
+        pa.style.width = pct + '%';
+        pb.style.width = (100 - pct) + '%';
+      }
+      pa.style.height = '100%'; pb.style.height = '100%';
     } else {
       pa.style.height = pct + '%'; pa.style.width = '100%';
       pb.style.height = (100 - pct) + '%'; pb.style.width = '100%';
@@ -1241,7 +1390,12 @@ const Layout = {
       const pos    = this.mode === 'horizontal' ? e.clientX : e.clientY;
       const origin = this.mode === 'horizontal' ? rect.left  : rect.top;
       const total  = this.mode === 'horizontal' ? rect.width : rect.height;
-      let pct = ((pos - origin) / total) * 100;
+      // Subtract Panel C + its resizer so split % is relative to A+B space only
+      const _pc = document.getElementById('panel-c');
+      const _rc = document.getElementById('resizer-c');
+      const _pcW = (this.mode === 'horizontal' && _pc && _pc.offsetWidth > 0)
+          ? _pc.offsetWidth + (_rc ? _rc.offsetWidth : 0) : 0;
+      let pct = ((pos - origin - _pcW) / (total - _pcW)) * 100;
       pct = Math.max(15, Math.min(85, pct));
       this.splitPct = pct;
       this.applySplit();
@@ -1289,6 +1443,126 @@ const TabManager = {
   tabs: [],
   activeId: null,
   _storageKey: null,
+  _activeChapter: null,  // null = show all; number = show only that chapter's tabs
+
+  _typeFilter: null,  // null = all; string = show only this extension
+
+  _tabExt(tab) {
+    if (tab.type === 'course') return 'course';
+    if (tab.type === 'zip-viewer') return 'zip';
+    if (tab.type === 'image-viewer') return 'images';
+    if (tab.type === 'video-grid') return 'videos';
+    if (tab.type === 'markdown') return 'md';
+    const url = decodeURIComponent(tab.url || '');
+    if (url.includes('/api/epub-html')) return 'epub';
+    if (url.includes('/api/docx-html')) return 'docx';
+    const ext = url.split('?')[0].split('.').pop().toLowerCase();
+    return ['pdf','html','htm','epub','zip','md','txt','docx','doc','rtf'].includes(ext)
+      ? (ext === 'htm' ? 'html' : ext === 'doc' ? 'docx' : ext) : 'other';
+  },
+
+  setTypeFilter(ext) {
+    // Toggle: clicking active filter deactivates it
+    this._typeFilter = (this._typeFilter === ext) ? null : ext;
+    if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
+    const visible = this._visibleTabs();
+    if (!visible.find(t => t.id === this.activeId)) {
+      this.activeId = visible[0]?.id || null;
+    } else if (this._typeFilter !== null) {
+      // If current tab is a global (video-grid, dir-browser, etc.), force switch to
+      // the first tab that actually matches the requested type
+      const cur = this.tabs.find(t => t.id === this.activeId);
+      if (cur && this._GLOBAL_TYPES.has(cur.type)) {
+        const firstMatch = visible.find(t => !this._GLOBAL_TYPES.has(t.type));
+        if (firstMatch) this.activeId = firstMatch.id;
+      }
+    }
+    this._renderTabBar();
+    this._applyActiveTab();
+    this.updateFilterBar();
+  },
+
+  updateFilterBar() {
+    const bar = document.getElementById('reader-filter-bar');
+    if (!bar) return;
+    const chTabs = this._activeChapter !== null
+      ? this.tabs.filter(t => t.chapterIdx === this._activeChapter)
+      : [];
+    if (chTabs.length === 0) { bar.style.display = 'none'; return; }
+    const EXT_ICON = {
+      pdf:    `<i data-lucide="file-down" size="11"></i>`,
+      epub:   `<i data-lucide="book-open" size="11"></i>`,
+      md:     `<i data-lucide="file-text" size="11"></i>`,
+      html:   `<i data-lucide="code-2" size="11"></i>`,
+      zip:    `<i data-lucide="archive" size="11"></i>`,
+      txt:    `<i data-lucide="file" size="11"></i>`,
+      images: `<i data-lucide="image" size="11"></i>`,
+      videos: `<i data-lucide="play" size="11"></i>`,
+      json:   `<i data-lucide="braces" size="11"></i>`,
+      js:     `<i data-lucide="code-2" size="11"></i>`,
+      py:     `<i data-lucide="code-2" size="11"></i>`,
+      other:  `<i data-lucide="paperclip" size="11"></i>`,
+    };
+    const EXT_LABEL = {pdf:'PDF',epub:'EPUB',md:'MD',html:'HTML',zip:'ZIP',txt:'TXT',images:'IMG',videos:'Video',json:'JSON',js:'JS',py:'PY',other:'DOC'};
+    const counts = {};
+    for (const t of chTabs) {
+      const e = this._tabExt(t);
+      counts[e] = (counts[e] || 0) + 1;
+    }
+    bar.style.display = 'flex';
+    bar.innerHTML = [
+      `<button class="filter-pill${this._typeFilter === null ? ' active' : ''}" onclick="TabManager.setTypeFilter(null)" title="Show all" style="display:flex;align-items:center;gap:3px"><i data-lucide="layout-grid" size="11"></i> ${chTabs.length}</button>`,
+      ...Object.entries(counts).map(([ext, cnt]) => {
+        const icon = EXT_ICON[ext] || `<i data-lucide="paperclip" size="11"></i>`;
+        const lbl  = EXT_LABEL[ext] || ext.toUpperCase();
+        return `<button class="filter-pill${this._typeFilter === ext ? ' active' : ''}" onclick="TabManager.setTypeFilter('${ext}')" title="${lbl}" style="display:flex;align-items:center;gap:3px">${icon} ${cnt}</button>`;
+      })
+    ].join('');
+    lucide.createIcons({ el: bar });
+  },
+
+  setChapter(idx) {
+    this._activeChapter = idx;
+    this._typeFilter = null;  // reset type filter on chapter change
+    const visible = this._visibleTabs();
+    if (visible.length === 0) {
+      this.activeId = null;
+      // Only switch to Notes if the chapter truly has no content (no docs, no videos, no subdirs)
+      const ch = (typeof CourseDir !== 'undefined' && CourseDir._data)
+        ? CourseDir._data.chapters?.[idx] : null;
+      const hasContent = ch && (ch.docs?.length > 0 || ch.videos?.length > 0 || ch.hasSubs
+        || ch.videos?.some(v => v.hasSub));
+      if (!hasContent && typeof PanelB !== 'undefined') PanelB.setMode('notes');
+      else if (hasContent && typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
+    } else {
+      // Switch back to Reader mode in case we were on Notes
+      if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
+      if (!visible.find(t => t.id === this.activeId)) {
+        this.activeId = visible[0]?.id || null;
+      }
+    }
+    this._renderTabBar();
+    this._applyActiveTab();
+    this.updateFilterBar();
+    this._save();
+  },
+
+  // Tab types that are always visible regardless of active chapter
+  _GLOBAL_TYPES: new Set(['dir-browser','code-viewer','search-results','subtitle-viewer','video-grid']),
+
+  _visibleTabs() {
+    let tabs = this.tabs;
+    if (this._activeChapter !== null) {
+      // When chapter active: show that chapter's tabs + global (cross-chapter) tabs
+      tabs = tabs.filter(t =>
+        t.chapterIdx === this._activeChapter || this._GLOBAL_TYPES.has(t.type)
+      );
+    }
+    if (this._typeFilter !== null) {
+      tabs = tabs.filter(t => this._tabExt(t) === this._typeFilter || this._GLOBAL_TYPES.has(t.type));
+    }
+    return tabs;
+  },
 
   init() {
     this._storageKey = `oc_reader_tabs_${appConfig._dirId || 'default'}`;
@@ -1323,6 +1597,8 @@ const TabManager = {
     for (const tab of this.tabs) {
       if (tab.type === 'image-viewer') this._createImageViewerFrame(tab);
       else if (tab.type === 'dir-browser') { /* DirBrowser creates its own element */ }
+      else if (tab.type === 'code-viewer') { /* CodeViewer creates its own element */ }
+      else if (tab.type === 'search-results') { /* GlobalSearch creates its own element */ }
       else if (tab.type === 'markdown' || /\.md$/i.test((tab.url || '').split('?')[0])) this._createMarkdownFrame(tab);
       else this._createFrame(tab);
     }
@@ -1369,8 +1645,9 @@ const TabManager = {
   _renderTabBar() {
     const list = document.getElementById('reader-tabs-list');
     if (!list) return;
-    list.innerHTML = this.tabs.map(tab => {
-      const closeBtn = this.tabs.length > 1
+    const visible = this._visibleTabs();
+    list.innerHTML = visible.map(tab => {
+      const closeBtn = visible.length > 1
         ? `<button class="reader-tab-close" onclick="event.stopPropagation();TabManager.closeTab('${tab.id}')" title="Close">×</button>`
         : '';
       return `<div class="reader-tab${tab.id === this.activeId ? ' active' : ''}" onclick="TabManager.switchTo('${tab.id}')">
@@ -1379,12 +1656,12 @@ const TabManager = {
       </div>`;
     }).join('');
 
-    // Tab jump select — show only when > 3 tabs
+    // Tab jump select — show only when > 3 visible tabs
     const sel = document.getElementById('tab-jump-select');
     if (sel) {
-      if (this.tabs.length > 3) {
+      if (visible.length > 3) {
         sel.style.display = 'inline-block';
-        sel.innerHTML = this.tabs.map(t =>
+        sel.innerHTML = visible.map(t =>
           `<option value="${t.id}"${t.id === this.activeId ? ' selected' : ''}>${t.title}</option>`
         ).join('');
       } else {
@@ -1395,13 +1672,21 @@ const TabManager = {
 
   _applyActiveTab() {
     const zoom = typeof ReaderZoom !== 'undefined' ? ReaderZoom.level : 1.0;
+    const visibleIds = new Set(this._visibleTabs().map(t => t.id));
     for (const tab of this.tabs) {
       const frame = document.getElementById(`reader-frame-${tab.id}`);
       if (!frame) continue;
-      const active = tab.id === this.activeId;
+      const active = tab.id === this.activeId && visibleIds.has(tab.id);
       frame.style.visibility = active ? 'visible' : 'hidden';
       frame.style.pointerEvents = active ? 'auto' : 'none';
-      if (active && tab.type !== 'image-viewer' && tab.type !== 'dir-browser') frame.style.zoom = zoom === 1.0 ? '' : zoom;
+      const noZoom = new Set(['image-viewer','dir-browser','code-viewer','search-results']);
+      if (active && !noZoom.has(tab.type)) frame.style.zoom = zoom === 1.0 ? '' : zoom;
+    }
+    // proxy-error overlay must follow the 'course' tab visibility
+    const proxyErr = document.getElementById('proxy-error');
+    if (proxyErr) {
+      const courseActive = this.activeId === 'course' && visibleIds.has('course');
+      proxyErr.style.display = courseActive ? '' : 'none';
     }
   },
 
@@ -1414,19 +1699,40 @@ const TabManager = {
     this._save();
   },
 
-  openTab(url, title, type = 'custom') {
-    // Auto-detect markdown files
+  openTab(url, title, type = 'custom', chapterIdx = null) {
+    // Auto-convert epub files to server-rendered HTML (avoids browser download)
+    if (type === 'custom' && !url.startsWith('/api/') && /\.epub$/i.test(decodeURIComponent(url).split('?')[0])) {
+      url = '/api/epub-html?path=' + encodeURIComponent(decodeURIComponent(url));
+    }
+    if (type === 'custom' && !url.startsWith('/api/') && /\.(docx|doc|rtf)$/i.test(decodeURIComponent(url).split('?')[0])) {
+      url = '/api/docx-html?path=' + encodeURIComponent(decodeURIComponent(url));
+    }
+    // ZIP files can't be shown in an iframe → open as zip-viewer
+    if (type === 'custom' && !url.startsWith('/api/') && /\.zip$/i.test(decodeURIComponent(url).split('?')[0])) {
+      const zipRel = decodeURIComponent(url);
+      const zipName = zipRel.split('/').pop();
+      if (typeof CourseDir !== 'undefined') CourseDir._openZipViewer(zipRel, zipName, chapterIdx);
+      return;
+    }
+    // SRT/VTT files → open as subtitle viewer tab
+    if (type === 'custom' && !url.startsWith('/api/') && /\.(srt|vtt)$/i.test(decodeURIComponent(url).split('?')[0])) {
+      const srtRel = decodeURIComponent(url);
+      const stem = srtRel.replace(/\.(srt|vtt)$/i, '').split('/').pop();
+      if (typeof CourseDir !== 'undefined') CourseDir._openSubtitleTabFromPath(srtRel, stem, chapterIdx);
+      return;
+    }
     if (type === 'custom' && /\.md$/i.test(url.split('?')[0])) type = 'markdown';
-    const existing = this.tabs.find(t => t.url === url && t.type === type);
+    const existing = this.tabs.find(t => t.url === url && t.type === type && t.chapterIdx === chapterIdx);
     if (existing) { this.switchTo(existing.id); return; }
     const id = 'tab_' + Date.now();
-    const tab = { id, title, url, type, scrollY: 0 };
+    const tab = { id, title, url, type, chapterIdx, scrollY: 0 };
     this.tabs.push(tab);
     if (type === 'markdown') this._createMarkdownFrame(tab);
     else this._createFrame(tab);
     this.activeId = id;
     this._renderTabBar();
     this._applyActiveTab();
+    this.updateFilterBar();
     this._save();
   },
 
@@ -1466,12 +1772,29 @@ const TabManager = {
   },
 
   closeTab(id) {
-    if (this.tabs.length <= 1) return;
+    const visible = this._visibleTabs();
+    if (visible.length <= 1) return;
     const idx = this.tabs.findIndex(t => t.id === id);
     if (idx < 0) return;
     document.getElementById(`reader-frame-${id}`)?.remove();
     this.tabs.splice(idx, 1);
-    if (this.activeId === id) this.activeId = this.tabs[Math.max(0, idx - 1)].id;
+    if (this.activeId === id) {
+      const nowVisible = this._visibleTabs();
+      this.activeId = nowVisible[Math.max(0, nowVisible.findIndex(t => t.id === id) - 1)]?.id
+                   || nowVisible[0]?.id
+                   || this.tabs[0]?.id;
+    }
+    this._renderTabBar();
+    this._applyActiveTab();
+    this._save();
+  },
+
+  closeOthers() {
+    const keepId = this.activeId;
+    const toRemove = this.tabs.filter(t => t.id !== keepId);
+    if (!toRemove.length) return;
+    toRemove.forEach(t => document.getElementById(`reader-frame-${t.id}`)?.remove());
+    this.tabs = this.tabs.filter(t => t.id === keepId);
     this._renderTabBar();
     this._applyActiveTab();
     this._save();
@@ -1496,11 +1819,12 @@ const TabManager = {
   _save() {
     if (!this._storageKey) return;
     const toSave = this.tabs
-      .filter(t => t.type !== 'dir-browser')
+      .filter(t => t.type !== 'dir-browser' && t.type !== 'zip-viewer' && t.type !== 'video-grid')
       .map(t => {
         const s = {
           id: t.id, title: t.title, type: t.type, scrollY: t.scrollY || 0,
-          url: t.url && t.url.startsWith('blob:') ? '' : (t.url || '')
+          url: t.url && t.url.startsWith('blob:') ? '' : (t.url || ''),
+          chapterIdx: t.chapterIdx != null ? t.chapterIdx : null
         };
         if (t.type === 'image-viewer' && t.images) s.images = t.images;
         return s;
@@ -1544,8 +1868,133 @@ const ReaderZoom = {
 };
 
 // ────────────────────────────────────────────────────────────
+// READER MARGIN (reading-width control)
+// ────────────────────────────────────────────────────────────
+const ReaderMargin = {
+  _steps: [
+    { label: 'W', padding: '0%' },
+    { label: 'N', padding: '5% 10%' },
+    { label: 'S', padding: '5% 20%' },
+  ],
+  _idx: 1,
+  init() {
+    this._idx = parseInt(localStorage.getItem('oc_reader_margin') || '1', 10);
+    if (this._idx < 0 || this._idx >= this._steps.length) this._idx = 1;
+    this._apply();
+  },
+  cycle() {
+    this._idx = (this._idx + 1) % this._steps.length;
+    localStorage.setItem('oc_reader_margin', String(this._idx));
+    this._apply();
+  },
+  _apply() {
+    const p = this._steps[this._idx].padding;
+    const l = this._steps[this._idx].label;
+    // Apply to all reader frames that are iframes or div-based
+    document.querySelectorAll('[id^="reader-frame-"]').forEach(el => {
+      if (el.tagName === 'IFRAME') {
+        try {
+          const body = el.contentDocument?.body;
+          if (body) body.style.padding = p;
+        } catch { /* cross-origin */ }
+      } else {
+        el.style.padding = p;
+      }
+    });
+    const btn = document.getElementById('btn-reader-margin');
+    if (btn) btn.title = `Reading width: ${['Wide','Normal','Narrow'][this._idx]}`;
+    if (btn) btn.textContent = ['⇔⇔','⇔','⟵⟶'][this._idx];
+  }
+};
+
+// ────────────────────────────────────────────────────────────
 // PANEL A (minimize/restore)
 // ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────
+// PANEL C (Course Directory left panel)
+// ────────────────────────────────────────────────────────────
+const PanelC = {
+  minimized: false,
+  _width: 240,
+
+  show() {
+    this._width = parseInt(localStorage.getItem('oc_panelc_w') || '240', 10);
+    const pc = document.getElementById('panel-c');
+    const rc = document.getElementById('resizer-c');
+    if (pc) { pc.style.display = 'flex'; pc.style.width = this._width + 'px'; }
+    if (rc) rc.style.display = '';
+    this.minimized = false;
+    document.getElementById('btn-course-dir')?.style.setProperty('display', '');
+    this._updateBtnIcon();
+    // Recalculate A/B split to account for new Panel C width
+    if (typeof Layout !== 'undefined') Layout.applySplit();
+  },
+
+  toggleMinimize() {
+    this.minimized = !this.minimized;
+    this._apply();
+    localStorage.setItem('oc_panelc_min', this.minimized ? '1' : '0');
+  },
+
+  _apply() {
+    const pc   = document.getElementById('panel-c');
+    const body = document.getElementById('panel-c-body');
+    const rest = document.getElementById('panel-c-restore');
+    if (!pc) return;
+    if (this.minimized) {
+      pc.style.width = '32px';
+      if (body) body.style.display = 'none';
+      if (rest) rest.style.display = 'flex';
+    } else {
+      pc.style.width = this._width + 'px';
+      if (body) body.style.display = '';
+      if (rest) rest.style.display = 'none';
+    }
+    this._updateBtnIcon();
+    if (typeof Layout !== 'undefined') Layout.applySplit();
+  },
+
+  _updateBtnIcon() {
+    const icon = document.querySelector('#panel-c .panel-header [data-lucide]');
+    if (!icon) return;
+    icon.setAttribute('data-lucide', this.minimized ? 'panel-left-open' : 'panel-left-close');
+    lucide.createIcons();
+  },
+
+  initResizer() {
+    const r = document.getElementById('resizer-c');
+    if (!r) return;
+    let dragging = false;
+    r.addEventListener('mousedown', e => {
+      dragging = true; r.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      const ov = document.createElement('div');
+      ov.id = 'drag-overlay-c';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize';
+      document.body.appendChild(ov);
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const pc = document.getElementById('panel-c');
+      if (!pc) return;
+      const rect = pc.getBoundingClientRect();
+      let w = e.clientX - rect.left;
+      w = Math.max(160, Math.min(420, w));
+      this._width = w;
+      pc.style.width = w + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false; r.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.getElementById('drag-overlay-c')?.remove();
+      localStorage.setItem('oc_panelc_w', String(this._width));
+      if (typeof Layout !== 'undefined') Layout.applySplit();
+    });
+  },
+};
+
 const PanelA = {
   minimized: false,
 
@@ -1628,7 +2077,9 @@ const PanelB = {
       if (iconEl) iconEl.setAttribute('data-lucide', 'notebook-pen');
       PanelBNotes.pullFromMain();
     } else {
-      if (pwBar) pwBar.style.display = appConfig?.coursePassword ? '' : 'none';
+      if (pwBar) pwBar.style.display = '';
+      const pwSection = document.getElementById('pw-bar-section');
+      if (pwSection) pwSection.style.display = appConfig?.coursePassword ? 'inline-flex' : 'none';
       if (tabBar) tabBar.style.display = '';
       if (framesContainer) framesContainer.style.display = '';
       if (notesWrap) notesWrap.style.display = 'none';
@@ -1722,6 +2173,12 @@ const Video = {
   _playAfterSeek: false,
   _savePositionInterval: null,
 
+  // Call this from user-click handlers to load AND autoplay
+  click(videoEntry) {
+    this._playAfterSeek = true;
+    this.load(videoEntry);
+  },
+
   _startSavingPosition() {
     clearInterval(this._savePositionInterval);
     this._savePositionInterval = setInterval(() => {
@@ -1741,6 +2198,10 @@ const Video = {
     localStorage.setItem(`oc_last_video_id_${appConfig?._dirId || 'default'}`, videoEntry.id);
     this.currentYtId = videoEntry.youtubeId || null;
     this.currentLocalUrl = null;
+    // Always expand Panel A and scroll to top when loading a video
+    if (typeof PanelA !== 'undefined' && PanelA.minimized) PanelA.toggleMinimize();
+    const _paBody = document.getElementById('panel-a-body');
+    if (_paBody) _paBody.scrollTop = 0;
     const wrapper = document.getElementById('video-wrapper');
     const noSrc = `<div style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#0a0c1a;color:#94a3b8;font-size:13px">No video source</div><div id="subtitle-overlay" style="display:none"></div>`;
 
@@ -1758,11 +2219,18 @@ const Video = {
 
     if (videoEntry.localFile) {
       const encodedPath = videoEntry.localFile.split('/').map(encodeURIComponent).join('/');
+      // Probe the file: many local .mp4 entries are 0-byte YouTube stubs (the real
+      // video lives on YouTube). A real file has content; a stub reports size 0.
+      // HEAD is fast — the proxy returns os.path.getsize() without reading the file.
       fetch(encodedPath, { method: 'HEAD' })
         .then(r => {
           const size = parseInt(r.headers.get('content-length') || '0', 10);
-          if (r.ok && size > 10240) this._loadLocalByPath(encodedPath, wrapper);
-          else loadFallback();
+          if (r.ok && size > 1024) {
+            if (typeof PanelA !== 'undefined' && PanelA.minimized) PanelA.toggleMinimize();
+            this._loadLocalByPath(encodedPath, wrapper);
+          } else {
+            loadFallback();  // 0-byte stub → YouTube/external/no-source
+          }
         })
         .catch(loadFallback);
     } else {
@@ -1784,6 +2252,7 @@ const Video = {
     ytPlayer = null;
     this.currentYtId = null;
     this.currentLocalUrl = encodedPath;
+    const noSrc = `<div style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#0a0c1a;color:#94a3b8;font-size:13px">No video source</div><div id="subtitle-overlay" style="display:none"></div>`;
     wrapper.innerHTML = `
       <video id="local-video" controls style="width:100%;height:100%;position:absolute;inset:0;background:#000">
         <source src="${encodedPath}">
@@ -1792,11 +2261,13 @@ const Video = {
     Sub._applyStoredStyle(document.getElementById('subtitle-overlay'));
     const vid = document.getElementById('local-video');
     if (vid) {
+      vid.addEventListener('error', () => { wrapper.innerHTML = noSrc; }, { once: true });
       vid.addEventListener('loadedmetadata', () => {
         const saved = this._getSavedPosition(currentVideo?.id);
         vid.currentTime = (this._seekOnLoad !== null) ? this._seekOnLoad : (saved ?? 1);
         this._seekOnLoad = null;
         if (this._playAfterSeek) { this._playAfterSeek = false; vid.play().catch(() => {}); }
+        this._applyStoredSpeed();
         this._startSavingPosition();
       }, { once: true });
     }
@@ -1838,6 +2309,7 @@ const Video = {
             ytPlayer.seekTo(saved, true);
           }
           if (this._playAfterSeek) { this._playAfterSeek = false; ytPlayer.playVideo(); }
+          this._applyStoredSpeed();
           Sub.startTracking();
           this._startSavingPosition();
         }
@@ -1891,6 +2363,24 @@ const Video = {
     if (ytPlayer && ytPlayer.playVideo) { ytPlayer.playVideo(); return; }
     const v = document.getElementById('local-video');
     if (v) v.play().catch(() => {});
+  },
+
+  setSpeed(rate) {
+    localStorage.setItem('oc_playback_rate', rate);
+    if (ytPlayer && ytPlayer.setPlaybackRate) ytPlayer.setPlaybackRate(rate);
+    const v = document.getElementById('local-video');
+    if (v) v.playbackRate = rate;
+    document.querySelectorAll('.spd-btn').forEach(b => {
+      const active = parseFloat(b.dataset.rate) === rate;
+      b.style.borderColor = active ? '#7c8cf8' : '#2d3154';
+      b.style.color       = active ? '#a5b4fc' : '#94a3b8';
+      b.style.fontWeight  = active ? '600'     : '';
+    });
+  },
+
+  _applyStoredSpeed() {
+    const r = parseFloat(localStorage.getItem('oc_playback_rate') || '1');
+    this.setSpeed(r);
   },
 
   openYouTubePrompt() {
@@ -2008,8 +2498,9 @@ const Sub = {
       for (const sf of v.subtitleFiles) this.loadFile(v.id, sf.lang, sf.file);
     } else if (v.subtitleFile) {
       this.loadFile(v.id, this._detectLang(v.subtitleFile), v.subtitleFile);
-    } else if (v.localFile) {
-      // Auto-detect: swap video extension for .srt (handles start.bat PowerShell bracket bug)
+    } else if (v.localFile && v.subtitleFile !== null) {
+      // Auto-detect only when subtitleFile is undefined (omitted from config)
+      // null = explicitly "no subtitle" — skip auto-detect
       const base = v.localFile.replace(/\.(mp4|webm|mkv|avi|mov|m4v)$/i, '');
       this.loadFile(v.id, 'en', base + '.srt');
     }
@@ -2451,7 +2942,59 @@ document.getElementById('marker-label-input')?.addEventListener('keydown', e => 
   if (e.key === 'Escape') closeMarkerModal();
 });
 
+// Scroll-to closure for Reading Markers TOC
+const _rmScrollTo = { fn: null };
+
 function showReadingMarkers() {
+  const frame = typeof TabManager !== 'undefined' ? TabManager.getActiveFrame() : null;
+  const tocEl = document.getElementById('reading-markers-list');
+  if (tocEl && frame) {
+    let headings = [];
+    try {
+      const doc = frame.tagName === 'IFRAME' ? frame.contentDocument : frame;
+      for (const tag of ['h1','h2','h3']) {
+        headings = [...(doc?.querySelectorAll(tag) || [])];
+        if (headings.length) break;
+      }
+    } catch { headings = []; }
+    if (headings.length) {
+      // Capture scroll offsets now while we have access to the live DOM
+      const isIframe = frame.tagName === 'IFRAME';
+      const entries = headings.map(h => {
+        let top = 0;
+        try {
+          let el = h;
+          const stopEl = isIframe ? frame.contentDocument?.body : frame;
+          while (el && el !== stopEl) { top += (el.offsetTop || 0); el = el.offsetParent; }
+        } catch {}
+        return { text: h.textContent.trim(), top };
+      });
+      // Store scroll fn so onclick can call without re-querying DOM
+      _rmScrollTo.fn = function(i) {
+        const f = typeof TabManager !== 'undefined' ? TabManager.getActiveFrame() : null;
+        if (!f) return;
+        try {
+          const top = Math.max(0, (entries[i]?.top ?? 0) - 40);
+          if (f.tagName === 'IFRAME') {
+            const win = f.contentWindow; if (win) win.scrollTo({ top, behavior: 'smooth' });
+          } else {
+            f.scrollTo({ top, behavior: 'smooth' });
+          }
+        } catch {}
+        closeReadingMarkers();
+      };
+      tocEl.innerHTML = '<div style="font-size:10px;color:#64748b;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #2d3154">Document Index</div>' +
+        entries.map((e, i) =>
+          `<div class="marker-item" style="cursor:pointer" onclick="_rmScrollTo.fn(${i})">
+            <i data-lucide="hash" size="10" style="color:#7c8cf8;flex-shrink:0"></i>
+            <span class="lbl" style="font-size:11px">${e.text.replace(/</g,'&lt;')}</span>
+          </div>`
+        ).join('');
+      lucide.createIcons({ el: tocEl });
+      document.getElementById('reading-modal').style.display = 'flex';
+      return;
+    }
+  }
   Markers.renderReadingMarkers();
   document.getElementById('reading-modal').style.display = 'flex';
 }
@@ -2637,10 +3180,16 @@ async function loadCourseFrame(frame) {
   const raw = appConfig.courseUrl;
   const pw  = appConfig.coursePassword || '';
 
+  // No courseUrl configured — show a quiet placeholder instead of the big error screen
+  if (!raw) {
+    frame.style.visibility = 'hidden';
+    return;
+  }
+
   const pwEl = document.getElementById('pw-display');
   if (pwEl) pwEl.textContent = pw;
-  const pwBar = document.getElementById('pw-bar');
-  if (pwBar) pwBar.style.display = pw ? '' : 'none';
+  const pwSection = document.getElementById('pw-bar-section');
+  if (pwSection) pwSection.style.display = pw ? 'inline-flex' : 'none';
 
   const onLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
   if (onLocalhost && raw) {
@@ -3241,6 +3790,8 @@ const DirBrowser = {
 
   openTab(path) {
     this._currentPath = path || '';
+    // Always switch to Course Reader mode
+    if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
     const existing = TabManager.tabs.find(t => t.id === this._tabId);
     if (existing) {
       TabManager.switchTo(this._tabId);
@@ -3280,8 +3831,9 @@ const DirBrowser = {
   },
 
   _renderHTML(el, data) {
-    const DOC_EXTS = new Set(['.pdf','.md','.html','.htm','.epub','.txt']);
-    const IMG_EXTS = new Set(['.png','.jpg','.jpeg','.gif','.webp','.svg']);
+    const DOC_EXTS   = new Set(['.pdf','.md','.html','.htm','.epub','.txt','.docx','.doc','.rtf']);
+    const CODE_EXTS  = new Set(['.js','.json','.xml','.php','.py','.ts','.css','.sh','.bat']);
+    const IMG_EXTS   = new Set(['.png','.jpg','.jpeg','.gif','.webp','.svg']);
     const VIDEO_EXTS = new Set(['.mp4','.m4v','.mov','.mkv','.avi','.webm','.ogg']);
 
     const pathParts = data.path ? data.path.split('/').filter(Boolean) : [];
@@ -3314,18 +3866,32 @@ const DirBrowser = {
       const sizeStr = f.size > 1048576 ? (f.size/1048576).toFixed(1)+'MB' : f.size > 1024 ? (f.size/1024).toFixed(0)+'KB' : f.size+'B';
       let icon = '📄';
       let action = '';
+      let thumb = '';
+      const encFilePath = filePath.split('/').map(encodeURIComponent).join('/');
+      const safeName = f.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const safeFilePath = filePath.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       if (DOC_EXTS.has(ext)) {
-        icon = ext === '.pdf' ? '📕' : ext === '.md' ? '📝' : '🌐';
-        action = `onclick="TabManager.openTab('${encodeURIComponent(filePath)}','${f.name}','custom')"`;
+        icon = ext === '.pdf' ? '📕' : ext === '.md' ? '📝' : ext === '.epub' ? '📗'
+             : ext === '.docx' || ext === '.doc' ? '📃' : ext === '.rtf' ? '📋' : '🌐';
+        action = `onclick="TabManager.openTab('${encFilePath}','${safeName}','custom',TabManager._activeChapter)"`;
+      } else if (CODE_EXTS.has(ext)) {
+        icon = ext === '.json' ? '{}' : ext === '.py' ? '🐍' : ext === '.xml' ? '🏷' : '</>';
+        action = `onclick="CodeViewer.open('${safeFilePath}','${safeName}',null)"`;
       } else if (IMG_EXTS.has(ext)) {
-        icon = '🖼';
-        action = `onclick="ImageViewer.open('${encodeURIComponent(filePath)}')"`;
+        icon = '';
+        thumb = `<img src="${encFilePath}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;flex-shrink:0;background:#1e2947" onerror="this.style.display='none';this.nextSibling.style.display='inline'" alt="${safeName}"><span style="display:none;font-size:18px">🖼</span>`;
+        action = `onclick="ImageViewer.open('${encFilePath}')"`;
+      } else if (ext === '.srt' || ext === '.vtt') {
+        icon = '📝';
+        const srtStem = safeName.replace(/\.(srt|vtt)$/i,'');
+        action = `onclick="TabManager.openTab('${encFilePath}','${safeName}','custom',TabManager._activeChapter)"`;
       } else if (VIDEO_EXTS.has(ext)) {
         icon = '🎬';
-        action = `onclick="Video.load({id:'dir_${encodeURIComponent(f.name)}',title:'${f.name}',localFile:'${filePath}',youtubeId:'',subtitleFile:''})"`;
+        action = `onclick="Video.click({id:'dir_${encodeURIComponent(f.name)}',title:'${safeName}',localFile:'${safeFilePath}',youtubeId:null,subtitleFile:null})"`;
       }
+      const iconHtml = thumb || `<span style="font-size:13px;flex-shrink:0;min-width:16px;text-align:center">${icon}</span>`;
       return `<div class="db-row" style="display:flex;align-items:center;gap:8px;cursor:pointer" ${action}>
-        <span style="font-size:13px">${icon}</span>
+        ${iconHtml}
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</span>
         <span style="color:#64748b;font-size:10px;flex-shrink:0">${sizeStr}</span>
       </div>`;
@@ -3370,6 +3936,402 @@ const DirBrowser = {
 };
 
 // ────────────────────────────────────────────────────────────
+// CODE VIEWER  (syntax-highlighted code files via Prism.js)
+// ────────────────────────────────────────────────────────────
+const CodeViewer = {
+  _extLang: {js:'javascript',json:'json',xml:'xml',php:'php',py:'python',ts:'typescript',css:'css',html:'html',sh:'bash',bat:'batch'},
+
+  open(filePath, fileName, targetLine) {
+    const tabId = 'code_' + btoa(filePath).replace(/[^a-zA-Z0-9]/g,'').slice(0,16);
+    fileName = fileName || filePath.split('/').pop();
+    const existing = TabManager.tabs.find(t => t.id === tabId);
+    if (existing) { TabManager.switchTo(tabId); return; }
+    const tab = { id: tabId, title: '\u{1F4BB} ' + fileName, url: '', type: 'code-viewer', scrollY: 0, filePath };
+    TabManager.tabs.push(tab);
+    TabManager.activeId = tabId;
+    TabManager._renderTabBar();
+    const container = document.getElementById('reader-frames-container');
+    if (container) {
+      const div = document.createElement('div');
+      div.id = `reader-frame-${tabId}`;
+      div.style.cssText = 'position:absolute;inset:0;overflow:auto;visibility:hidden;pointer-events:none;background:#1d2133;color:#e2e8f0;font-size:12px';
+      container.appendChild(div);
+      this._load(div, filePath, targetLine);
+    }
+    TabManager._applyActiveTab();
+    TabManager._save();
+  },
+
+  async _load(div, filePath, targetLine) {
+    div.innerHTML = '<div style="padding:16px;color:#64748b">Loading…</div>';
+    try {
+      const enc = filePath.split('/').map(encodeURIComponent).join('/');
+      const r = await fetch(`/api/file-content?path=${enc}`);
+      if (!r.ok) throw new Error('Failed');
+      const data = await r.json();
+      const ext  = filePath.split('.').pop().toLowerCase();
+      const lang = this._extLang[ext] || 'plaintext';
+      const escaped = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      div.innerHTML = `<pre style="margin:0;padding:16px 16px 32px;tab-size:2;line-height:1.55;counter-reset:ln"><code class="language-${lang}">${escaped}</code></pre>`;
+      if (typeof Prism !== 'undefined') {
+        if (Prism.plugins && Prism.plugins.autoloader) {
+          Prism.plugins.autoloader.languages_path = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/';
+        }
+        Prism.highlightAllUnder(div);
+      }
+      if (targetLine) setTimeout(() => { div.scrollTop = Math.max(0, (targetLine - 3)) * 19; }, 120);
+    } catch {
+      div.innerHTML = '<div style="padding:16px;color:#f87171">Could not load file. Is the proxy running?</div>';
+    }
+  },
+};
+
+// ────────────────────────────────────────────────────────────
+// GLOBAL SEARCH  (SRT + document full-text search)
+// ────────────────────────────────────────────────────────────
+const GlobalSearch = {
+  _debounce: null,
+  _lastResults: null,
+  _prefilter: null,   // null = all; string = only this type group
+  _typeFilter: null,  // post-search filter by exact type
+  _q: '',
+
+  open() {
+    const modal = document.getElementById('global-search-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const bar = document.getElementById('gs-prefilter-bar');
+    if (bar) bar.style.display = 'flex';
+    const inp = document.getElementById('global-search-input');
+    if (inp) { inp.focus(); inp.select(); }
+    // Restore stored depth
+    const sel = document.getElementById('gs-depth-select');
+    if (sel) sel.value = String(this._searchDepth);
+    lucide.createIcons({ el: modal });
+  },
+
+  close() {
+    const modal = document.getElementById('global-search-modal');
+    if (modal) modal.style.display = 'none';
+  },
+
+  setPrefilter(type) {
+    this._prefilter = type;
+    this._typeFilter = null;
+    document.querySelectorAll('[id^="gsf-"]').forEach(b => b.classList.remove('active'));
+    const key = type === null ? 'all' : type;
+    const btn = document.getElementById('gsf-' + key);
+    if (btn) btn.classList.add('active');
+    if (this._q) this._triggerSearch(this._q);
+  },
+
+  onInput(val) {
+    clearTimeout(this._debounce);
+    this._q = val.trim();
+    const el = document.getElementById('global-search-results');
+    const countEl = document.getElementById('global-search-count');
+    const tfBar = document.getElementById('gs-typefilter-bar');
+    if (!this._q) {
+      if (el) el.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:24px">Type to search subtitles and documents…</div>';
+      if (countEl) countEl.textContent = '';
+      if (tfBar) tfBar.style.display = 'none';
+      this._hideProgress();
+      return;
+    }
+    this._debounce = setTimeout(() => this._triggerSearch(this._q), 400);
+  },
+
+  _searchDepth: parseInt(localStorage.getItem('oc_search_depth') || '3', 10),
+
+  setDepth(n) {
+    this._searchDepth = n;
+    localStorage.setItem('oc_search_depth', String(n));
+    const sel = document.getElementById('gs-depth-select');
+    if (sel) sel.value = String(n);
+    if (this._q) this._triggerSearch(this._q);
+  },
+
+  _triggerSearch(q) {
+    this._typeFilter = null;
+    this._showProgress();
+    const el = document.getElementById('global-search-results');
+    if (el) el.innerHTML = '';
+    this._lastResults = [];
+    // Build URL
+    const ch = (typeof CourseDir !== 'undefined' && CourseDir._activeIdx !== null && CourseDir._data)
+      ? CourseDir._data.chapters?.[CourseDir._activeIdx] : null;
+    const pathParam = ch?.subpath ? `&path=${encodeURIComponent(ch.subpath)}` : '';
+    const typeParam = this._prefilter ? `&types=${encodeURIComponent(this._prefilter)}` : '';
+    const depthParam = `&depth=${encodeURIComponent(this._searchDepth)}`;
+    const url = `/api/search?q=${encodeURIComponent(q)}${pathParam}${typeParam}${depthParam}`;
+    this._streamSearch(url, q);
+  },
+
+  async _streamSearch(url, q) {
+    const el = document.getElementById('global-search-results');
+    const countEl = document.getElementById('global-search-count');
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('failed');
+      const data = await r.json();
+      this._lastResults = data.results || [];
+      this._hideProgress();
+      this._buildTypeFilterBar(this._lastResults);
+      this._renderFiltered(el, q);
+      const total = this._lastResults.length;
+      if (countEl) countEl.textContent = total ? `${total} file${total !== 1 ? 's' : ''}` : '';
+    } catch {
+      this._hideProgress();
+      if (el) el.innerHTML = '<div style="color:#f87171;font-size:12px;text-align:center;padding:24px">Search failed. Is the proxy running?</div>';
+    }
+  },
+
+  _showProgress() {
+    const p = document.getElementById('gs-progress');
+    const pb = document.getElementById('gs-progress-bar');
+    if (p) p.style.display = 'block';
+    if (pb) { pb.style.width = '0%'; setTimeout(() => { if (pb) pb.style.width = '70%'; }, 20); }
+  },
+
+  _hideProgress() {
+    const p = document.getElementById('gs-progress');
+    const pb = document.getElementById('gs-progress-bar');
+    if (pb) pb.style.width = '100%';
+    setTimeout(() => { if (p) p.style.display = 'none'; if (pb) pb.style.width = '0%'; }, 400);
+  },
+
+  _buildTypeFilterBar(results) {
+    const tfBar = document.getElementById('gs-typefilter-bar');
+    const pillsEl = document.getElementById('gs-type-pills');
+    if (!tfBar || !pillsEl || !results.length) {
+      if (tfBar) tfBar.style.display = 'none';
+      return;
+    }
+    const counts = {};
+    results.forEach(f => { counts[f.type] = (counts[f.type] || 0) + 1; });
+    const TYPE_ICON = {
+      srt:      `<i data-lucide="subtitles" size="10"></i>`,
+      vtt:      `<i data-lucide="subtitles" size="10"></i>`,
+      pdf:      `<i data-lucide="file-down" size="10"></i>`,
+      md:       `<i data-lucide="file-text" size="10"></i>`,
+      html:     `<i data-lucide="code-2" size="10"></i>`,
+      txt:      `<i data-lucide="file" size="10"></i>`,
+      js:       `<i data-lucide="braces" size="10"></i>`,
+      json:     `<i data-lucide="braces" size="10"></i>`,
+      py:       `<i data-lucide="braces" size="10"></i>`,
+      filename: `<i data-lucide="file-search" size="10"></i>`,
+      folder:   `<i data-lucide="folder" size="10"></i>`,
+    };
+    const total = results.length;
+    let pills = `<button class="filter-pill${this._typeFilter === null ? ' active' : ''}" onclick="GlobalSearch.setTypeFilter(null)" style="font-size:10px;padding:1px 7px">All (${total})</button> `;
+    pills += Object.entries(counts).map(([t, c]) =>
+      `<button class="filter-pill${this._typeFilter === t ? ' active' : ''}" onclick="GlobalSearch.setTypeFilter('${t}')"
+              style="font-size:10px;padding:1px 7px;display:inline-flex;align-items:center;gap:3px">${TYPE_ICON[t]||'📄'} ${t.toUpperCase()} (${c})</button>`
+    ).join(' ');
+    pillsEl.innerHTML = pills;
+    tfBar.style.display = 'flex';
+    lucide.createIcons({ el: tfBar });
+  },
+
+  setTypeFilter(type) {
+    this._typeFilter = type;
+    this._buildTypeFilterBar(this._lastResults || []);
+    const el = document.getElementById('global-search-results');
+    this._renderFiltered(el, this._q);
+  },
+
+  _hl(text, q) {
+    const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return escaped.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi'),
+      m => `<mark style="background:#3b4fd8;color:#fff;border-radius:2px;padding:0 2px">${m}</mark>`);
+  },
+
+  _renderFiltered(el, q) {
+    if (!el) return;
+    const results = (this._lastResults || []).filter(f =>
+      !this._typeFilter || f.type === this._typeFilter
+    );
+    if (!results.length) {
+      el.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:24px">No results found</div>';
+      return;
+    }
+    el.innerHTML = results.map(file => {
+      const isSrt     = file.type === 'srt' || file.type === 'vtt';
+      const isFolder  = file.type === 'folder';
+      const isName    = file.type === 'filename';
+      const TYPE_ICON_SVG = {
+        srt: '🎬', vtt: '🎬', pdf: '📕', md: '📝', html: '🌐',
+        txt: '📄', js: '⚡', json: '{}', py: '🐍', xml: '🔖',
+        filename: '🔍', folder: '📁',
+      };
+      const fIcon = TYPE_ICON_SVG[file.type] || '📄';
+      const matchHtml = file.matches.map(m => {
+        const fp = file.file.replace(/\\/g, '/').replace(/'/g, "\\'");
+        if (isFolder) {
+          return `<div style="padding:3px 8px;cursor:pointer;border-radius:4px"
+                       onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''"
+                       onclick="DirBrowser.openTab('${fp}');GlobalSearch.close()">
+                    <span style="font-size:11px;color:#fbbf24">${this._hl(m.text, q)}</span>
+                  </div>`;
+        }
+        if (isName) {
+          const nameExt = (fp.split('.').pop() || '').toLowerCase();
+          const isVid = ['mp4','m4v','mov','mkv','avi','webm','ogg'].includes(nameExt);
+          const clickFn = isVid
+            ? `Video.click({id:'search_${encodeURIComponent(fp)}',title:'${fp.split('/').pop().replace(/\.[^.]+$/,'').replace(/'/g,"\\'")}',localFile:'${fp.replace(/'/g,"\\'")}',youtubeId:null,subtitleFile:null});GlobalSearch.close()`
+            : `GlobalSearch._openDoc('${fp}',null)`;
+          return `<div style="padding:3px 8px;cursor:pointer;border-radius:4px"
+                       onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''"
+                       onclick="${clickFn}">
+                    <span style="font-size:11px;color:#e2e8f0">${this._hl(m.text, q)}</span>
+                  </div>`;
+        }
+        if (isSrt) {
+          const h = Math.floor(m.time / 3600), mn = Math.floor((m.time % 3600) / 60), s = m.time % 60;
+          const timeStr = h > 0
+            ? `${h}:${String(mn).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+            : `${mn}:${String(s).padStart(2,'0')}`;
+          return `<div style="padding:3px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:flex-start;gap:6px"
+                       onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''"
+                       onclick="GlobalSearch._openSrt('${fp}',${m.time})">
+                    <span style="color:#7c8cf8;font-size:10px;flex-shrink:0;padding-top:2px;min-width:36px">${timeStr}</span>
+                    <span style="font-size:11px;color:#cbd5e1">${this._hl(m.text, q)}</span>
+                  </div>`;
+        }
+        return `<div style="padding:3px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:flex-start;gap:6px"
+                     onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''"
+                     onclick="GlobalSearch._openDoc('${fp}',${m.line||'null'})">
+                  <span style="color:#64748b;font-size:10px;flex-shrink:0;padding-top:2px;min-width:30px">${m.line ? 'L'+m.line : ''}</span>
+                  <span style="font-size:11px;color:#cbd5e1">${this._hl(m.text, q)}</span>
+                </div>`;
+      }).join('');
+      return `<div style="margin-bottom:10px">
+        <div style="font-size:10px;font-weight:600;color:#7c8cf8;padding:3px 8px;background:#0a0d1a;border-radius:4px;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${fIcon} ${file.file}
+        </div>
+        ${matchHtml}
+      </div>`;
+    }).join('');
+  },
+
+  _openSrt(filePath, time) {
+    // Strip language suffix (.en.srt → base.srt stem)
+    const fname = filePath.split('/').pop();
+    const baseStem = fname.replace(/\.\w{2,3}\.(srt|vtt)$/i, '').replace(/\.(srt|vtt)$/i, '');
+    const cfg = typeof appConfig !== 'undefined' ? appConfig : null;
+    const video = (cfg?.videos || []).find(v => {
+      if (!v.subtitleFile) return false;
+      const sf = v.subtitleFile.replace(/\.\w{2,3}\.(srt|vtt)$/i, '').replace(/\.(srt|vtt)$/i, '');
+      return sf === baseStem || v.subtitleFile === fname;
+    }) || (cfg?.videos || []).find(v => {
+      // Fallback: match by video localFile stem
+      if (!v.localFile) return false;
+      const vs = v.localFile.replace(/\.[^.]+$/, '');
+      return vs === baseStem;
+    }) || ((() => {
+      // Try matching from CourseDir video entries
+      const chapters = (typeof CourseDir !== 'undefined' ? CourseDir._data?.chapters : null) || [];
+      for (const ch of chapters) {
+        for (const v of (ch.videos || [])) {
+          const vStem = v.name.replace(/\.[^.]+$/, '');
+          if (vStem === baseStem) return { id: 'dir_' + v.rel, title: v.name, localFile: v.rel, youtubeId: null, subtitleFile: filePath };
+        }
+      }
+      return null;
+    })());
+    if (!video) {
+      // Last resort: video at same path with .mp4 extension
+      const videoPath = filePath.replace(/\.(srt|vtt)$/i, '.mp4');
+      video = { id: 'auto_' + encodeURIComponent(videoPath), title: baseStem, localFile: videoPath, youtubeId: null, subtitleFile: filePath };
+    }
+    if (video) {
+      if (typeof PanelA !== 'undefined' && PanelA.minimized) PanelA.toggleMinimize();
+      const paBody = document.getElementById('panel-a-body');
+      if (paBody) paBody.scrollTop = 0;
+      Video._seekOnLoad = time;
+      Video._playAfterSeek = true;
+      Video.load(video);
+      this.close();
+    }
+  },
+
+  _openDoc(filePath, line) {
+    if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
+    const VIDEO_EXTS = new Set(['mp4','m4v','mov','mkv','avi','webm','ogg']);
+    const CODE_EXTS  = new Set(['js','json','xml','php','py','ts','css','sh','bat']);
+    const ext = (filePath.split('.').pop() || '').toLowerCase();
+    const name = filePath.split('/').pop();
+    // Video file → load in player with autoplay
+    if (VIDEO_EXTS.has(ext)) {
+      const title = name.replace(/\.[^.]+$/, '');
+      Video.click({ id: 'search_' + encodeURIComponent(filePath), title, localFile: filePath, youtubeId: null, subtitleFile: null });
+      this.close(); return;
+    }
+    if (CODE_EXTS.has(ext)) {
+      CodeViewer.open(filePath, name, line);
+    } else {
+      const enc = filePath.split('/').map(encodeURIComponent).join('/');
+      // Use current active chapter so the tab is visible under that chapter
+      const chIdx = (typeof TabManager !== 'undefined') ? TabManager._activeChapter : null;
+      const id = 'tab_' + Date.now();
+      const tab = { id, title: name, url: enc, type: 'custom', chapterIdx: chIdx, scrollY: 0 };
+      if (typeof TabManager !== 'undefined') {
+        TabManager.tabs.push(tab);
+        TabManager._createFrame(tab);
+        TabManager.activeId = id;
+        TabManager._renderTabBar();
+        TabManager._applyActiveTab();
+        TabManager.updateFilterBar();
+        TabManager._save();
+      }
+    }
+    this.close();
+  },
+};
+
+// ────────────────────────────────────────────────────────────
+// APP UPDATER — version check + self-update
+// ────────────────────────────────────────────────────────────
+const AppUpdater = {
+  async checkSilent() {
+    try {
+      const r = await fetch('/api/check-version');
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data.hasUpdate) {
+        const btn = document.getElementById('btn-update-app');
+        if (btn) {
+          btn.style.display = '';
+          btn.title = `Update available: v${data.currentVersion} → v${data.latestVersion}. Click to install.`;
+          lucide.createIcons({ el: btn });
+        }
+      }
+    } catch { /* network unavailable — silently ignore */ }
+  },
+
+  async update() {
+    const btn = document.getElementById('btn-update-app');
+    if (btn) { btn.disabled = true; btn.title = 'Updating…'; }
+    toast('Downloading update…');
+    try {
+      const r = await fetch('/api/self-update');
+      if (!r.ok) throw new Error('failed');
+      const data = await r.json();
+      if (data.ok) {
+        toast('Update complete — reloading…');
+        setTimeout(() => location.reload(true), 1500);
+      } else {
+        toast('Update failed: ' + (data.errors || []).join(', '));
+        if (btn) btn.disabled = false;
+      }
+    } catch {
+      toast('Update failed — check connection');
+      if (btn) btn.disabled = false;
+    }
+  },
+};
+
+// ────────────────────────────────────────────────────────────
 // IMAGE VIEWER
 // ────────────────────────────────────────────────────────────
 const ImageViewer = {
@@ -3392,6 +4354,42 @@ const ImageViewer = {
 const CourseDir = {
   _data: null,
   _activeIdx: -1,
+  _showAllPills: false,
+
+  _visitKey() {
+    return 'oc_cdir_visited_' + ((typeof appConfig !== 'undefined' && appConfig._dirId) || 'default');
+  },
+  _getVisited() {
+    try { return new Set(JSON.parse(localStorage.getItem(this._visitKey()) || '[]')); } catch { return new Set(); }
+  },
+  _markVisited(idx) {
+    const v = this._getVisited(); v.add(idx);
+    localStorage.setItem(this._visitKey(), JSON.stringify([...v]));
+  },
+
+  _toggleAllPills() {
+    this._showAllPills = !this._showAllPills;
+    this._render();
+  },
+
+  openRoot() {
+    this._activeIdx = -1;
+    this._render();
+    // If appConfig has videos/docs, show them; otherwise open dir browser
+    const hasVideos = (typeof appConfig !== 'undefined') && (appConfig.videos?.length > 0);
+    window._chapterVideos = null;
+    renderFileList();
+    TabManager.setChapter(null);
+    if (!hasVideos) {
+      DirBrowser.openTab('');
+    } else {
+      // Reset to main course tab
+      const courseTab = TabManager.tabs.find(t => t.id === 'course');
+      if (courseTab) TabManager.switchTo('course');
+      if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
+      if (typeof PanelA !== 'undefined' && PanelA.minimized) PanelA.toggleMinimize();
+    }
+  },
 
   async detect() {
     if (!window._hasBackend) return;
@@ -3402,68 +4400,359 @@ const CourseDir = {
       if (!data.pattern || !data.chapters.length) return;
       this._data = data;
       this._render();
-      const btn  = document.getElementById('btn-course-dir');
-      const card = document.getElementById('course-dir-card');
-      if (btn)  btn.style.display  = '';
-      if (card) card.style.display = '';
-      initSection('coursedir', false);
+      PanelC.show();
     } catch {}
   },
-
-  toggle() { toggleSection('coursedir'); },
 
   _render() {
     const list = document.getElementById('coursedir-list');
     if (!list || !this._data) return;
-    list.innerHTML = this._data.chapters.map((ch, idx) => {
-      const vCnt = ch.videos.length;
-      const dCnt = ch.docs.length;
-      const meta = [
-        vCnt ? `&#9654; ${vCnt} video${vCnt > 1 ? 's' : ''}` : '',
-        dCnt ? `${dCnt} doc${dCnt > 1 ? 's' : ''}` : '',
-      ].filter(Boolean).join(' &middot; ');
-      return `<div class="file-item" data-cdir-idx="${idx}"
-          style="flex-direction:column;align-items:flex-start;gap:2px;padding:6px 8px;cursor:pointer"
-          onclick="CourseDir.openChapter(${idx})">
-        <span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%">${ch.title}</span>
-        ${meta ? `<span style="font-size:10px;color:#64748b">${meta}</span>` : ''}
-      </div>`;
+    const visited = this._getVisited();
+    const chapters = this._data.chapters;
+
+    // Root entry: course URL as clickable name, or directory name as fallback
+    const courseUrl = (typeof appConfig !== 'undefined' && appConfig.courseUrl) || '';
+    let rootLabel = (typeof appConfig !== 'undefined' && appConfig._dirName) || '';
+    if (courseUrl) {
+      try { rootLabel = new URL(courseUrl).hostname || rootLabel; } catch { rootLabel = courseUrl || rootLabel; }
+    }
+    const rootHtml = rootLabel
+      ? `<div style="display:flex;align-items:center;gap:6px;padding:4px 2px 6px 2px;cursor:pointer;border-radius:6px;transition:background .12s"
+              onclick="CourseDir.openRoot()" title="Show root content"
+              onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+           <div style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;background:#312e81;color:#c4b5fd;border:2px solid #4338ca">&#9654;</div>
+           <div style="flex:1;min-width:0">
+             <div style="font-size:11px;font-weight:700;color:#c4b5fd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:4px">
+               <span style="overflow:hidden;text-overflow:ellipsis;min-width:0">${rootLabel}</span>
+               ${courseUrl ? `<a href="${courseUrl}" target="_blank" rel="noopener" title="${courseUrl}" onclick="event.stopPropagation()" style="color:#7c8cf8;display:inline-flex;align-items:center;flex-shrink:0"><i data-lucide="external-link" size="10"></i></a>` : ''}
+             </div>
+             <div style="font-size:9px;color:#64748b;margin-top:1px;display:flex;align-items:center;gap:5px">
+               <span>${chapters.length} chapter${chapters.length !== 1 ? 's' : ''}</span>
+               <button onclick="event.stopPropagation();CourseDir._toggleAllPills()"
+                       title="${this._showAllPills ? 'Hide doc types' : 'Show all doc types'}"
+                       style="font-size:9px;border:1px solid #2d3154;border-radius:4px;padding:0 4px;background:none;color:#64748b;cursor:pointer;line-height:1.4">${this._showAllPills ? '▲' : '▼'}</button>
+             </div>
+           </div>
+         </div>`
+      : '';
+
+    const chaptersHtml = chapters.map((ch, idx) => {
+      const isActive  = idx === this._activeIdx;
+      const isDone    = visited.has(idx);
+      const bCls      = 'cdir-b' + (isActive ? ' cdir-b-active' : isDone ? ' cdir-b-done' : '');
+      const bIcon     = isActive ? '&#9654;' : isDone ? '&#10003;' : (idx + 1);
+      const DOC_ICON_MAP = {
+        pdf:  `<i data-lucide="file-down" size="10"></i>`,
+        epub: `<i data-lucide="book-open" size="10"></i>`,
+        md:   `<i data-lucide="file-text" size="10"></i>`,
+        html: `<i data-lucide="code-2" size="10"></i>`,
+        zip:  `<i data-lucide="archive" size="10"></i>`,
+        txt:  `<i data-lucide="file" size="10"></i>`,
+      };
+      // Count per doc extension
+      const docCounts = {};
+      ch.docs.forEach(d => {
+        const e = d.name.split('.').pop().toLowerCase();
+        if (DOC_ICON_MAP[e]) docCounts[e] = (docCounts[e] || 0) + 1;
+      });
+      const docPills = Object.entries(docCounts).map(([e, cnt]) =>
+        `<span onclick="event.stopPropagation();CourseDir.filterChapter(${idx},'${e}')"
+               title="${e.toUpperCase()} (${cnt})"
+               style="display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;margin-right:3px;white-space:nowrap"
+               onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'">${DOC_ICON_MAP[e]} ${cnt}</span>`
+      ).join('');
+      const videoMeta = ch.videos.length > 0
+        ? `<span onclick="event.stopPropagation();CourseDir.filterChapter(${idx},'videos')"
+                 title="Videos (${ch.videos.length})"
+                 style="display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;margin-right:3px"
+                 onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'"><i data-lucide="play" size="10"></i> ${ch.videos.length}</span>` : '';
+      const subCount = ch.videos.filter(v => v.hasSub).length;
+      const subPill = subCount > 0
+        ? `<span title="Subtitles (${subCount})"
+                 style="display:inline-flex;align-items:center;gap:2px;font-size:9px;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;margin-right:3px">
+                 <i data-lucide="subtitles" size="10"></i> ${subCount}</span>` : '';
+      const subfolderPill = ch.subpath
+        ? `<span onclick="event.stopPropagation();DirBrowser.openTab('${(ch.subpath||'').replace(/'/g,"\\'")}')"
+                 title="Browse chapter directory"
+                 style="display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;margin-right:3px"
+                 onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'"><i data-lucide="folder-tree" size="10"></i></span>` : '';
+      const titleCls = 'cdir-title' + (isActive ? ' cdir-active' : isDone ? ' done' : '');
+      const showPills = isActive || this._showAllPills;
+      const pillsHtml = showPills && (videoMeta || docPills || subPill || subfolderPill)
+        ? `<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:2px">${videoMeta}${docPills}${subPill}${subfolderPill}</div>` : '';
+      if (rootLabel) {
+        // Indented chapter with horizontal branch off the trunk
+        return `<div style="display:flex;align-items:flex-start">
+          <div style="width:8px;height:2px;background:#2d3154;margin-top:10px;flex-shrink:0"></div>
+          <div data-cdir-idx="${idx}" onclick="CourseDir.openChapter(${idx})"
+               style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;flex:1;min-width:0;padding:2px 4px 4px 0;border-radius:6px;transition:background .12s"
+               onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+            <div class="${bCls}">${bIcon}</div>
+            <div style="flex:1;min-width:0;padding-top:1px">
+              <div class="${titleCls}">${ch.title}</div>
+              ${pillsHtml}
+            </div>
+          </div>
+        </div>`;
+      } else {
+        return `<div data-cdir-idx="${idx}" onclick="CourseDir.openChapter(${idx})"
+             style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:4px;border-radius:6px;transition:background .12s"
+             onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+          <div class="${bCls}">${bIcon}</div>
+          <div style="flex:1;min-width:0;padding-top:1px">
+            <div class="${titleCls}">${ch.title}</div>
+            ${pillsHtml}
+          </div>
+        </div>`;
+      }
     }).join('');
+
+    // Wrap chapters in trunk container when root label present
+    const chaptersContainer = rootLabel
+      ? `<div style="margin-left:9px;border-left:2px solid #2d3154;padding-left:0">${chaptersHtml}</div>`
+      : chaptersHtml;
+
+    list.innerHTML = rootHtml + chaptersContainer;
     lucide.createIcons();
+  },
+
+  async filterChapter(idx, ext) {
+    if (this._activeIdx !== idx) {
+      await this.openChapter(idx);
+      // openChapter resets _typeFilter; apply now after navigation
+      TabManager.setTypeFilter(ext);
+    } else {
+      // Same chapter — toggle the filter
+      TabManager.setTypeFilter(ext);
+    }
   },
 
   async openChapter(idx) {
     if (!this._data) return;
     const ch = this._data.chapters[idx];
     this._activeIdx = idx;
-    document.querySelectorAll('[data-cdir-idx]').forEach(el => {
-      el.classList.toggle('active', +el.dataset.cdirIdx === idx);
-    });
+    this._markVisited(idx);
+    this._render(); // re-render to update check/bullet
+
+    // Switch Reader to this chapter's tab set
+    TabManager.setChapter(idx);
+
+    // Open docs (+ subtitle tabs) only if first visit
+    const chapterHasTabs = TabManager.tabs.some(t => t.chapterIdx === idx);
+    let firstDocTabId = null, firstSubTabId = null;
+    if (!chapterHasTabs) {
+      for (const doc of ch.docs) {
+        const lname = doc.name.toLowerCase();
+        if (lname.endsWith('.zip')) {
+          await this._openZipViewer(doc.rel, doc.name, idx);
+        } else {
+          const url = doc.rel.split('/').map(encodeURIComponent).join('/');
+          TabManager.openTab(url, doc.name, 'custom', idx);
+        }
+        if (!firstDocTabId) {
+          const newest = TabManager.tabs.filter(t => t.chapterIdx === idx).slice(-1)[0];
+          if (newest) firstDocTabId = newest.id;
+        }
+      }
+      // Open subtitle tabs for videos that have subtitles
+      for (const v of ch.videos) {
+        if (v.hasSub) {
+          const stem = v.name.replace(/\.[^.]+$/, '');
+          const subRel = (ch.subpath ? ch.subpath + '/' : '') + stem;
+          await this._openSubtitleTab(subRel, stem, idx);
+          if (!firstSubTabId) {
+            const newest = TabManager.tabs.filter(t => t.chapterIdx === idx && t.type === 'subtitle-viewer').slice(-1)[0];
+            if (newest) firstSubTabId = newest.id;
+          }
+        }
+      }
+      // Switch to first available tab: docs first, then subtitles
+      const preferredTabId = firstDocTabId || firstSubTabId;
+      if (preferredTabId) TabManager.switchTo(preferredTabId);
+    } else {
+      // Re-visit: ensure first chapter tab is active
+      const chTab = TabManager.tabs.find(t => t.chapterIdx === idx);
+      if (chTab && TabManager.activeId !== chTab.id) TabManager.switchTo(chTab.id);
+    }
+
+    // Keep DirBrowser in sync with active chapter path (silently — don't steal tab focus)
+    if (ch.subpath && TabManager.tabs.find(t => t.id === DirBrowser._tabId)) {
+      DirBrowser._currentPath = ch.subpath;
+      DirBrowser._render(ch.subpath);
+    }
+
+    // Video section: use chapter videos if present, else restore main list
+    const filesBody = document.getElementById('files-body');
     if (ch.videos.length > 0) {
-      const v = ch.videos[0];
-      Video.load({
-        id: 'cdir_' + idx + '_0',
+      const entries = ch.videos.map((v, i) => ({
+        id: 'cdir_' + idx + '_' + i,
         title: v.name.replace(/\.[^.]+$/, ''),
         youtubeId: null,
         localFile: v.rel,
-        subtitleFile: '',
-      });
-    }
-    for (const doc of ch.docs) {
-      if (doc.name.toLowerCase().endsWith('.zip')) {
-        this._openZipViewer(doc.rel, doc.name);
+        subtitleFile: null,
+        hasSub: v.hasSub || false,
+      }));
+      window._chapterVideos = entries;
+      renderFileList();
+      Video.load(entries[0]);
+      if (filesBody && filesBody.style.display === 'none') toggleSection('files');
+      // Create video grid tab if it doesn't exist yet
+      const _gridId = 'vgrid_' + idx;
+      const hadDocsOrSubs = !!(firstDocTabId || firstSubTabId);
+      if (!TabManager.tabs.find(t => t.id === _gridId)) {
+        this._openVideoGrid(entries, idx);
+        // If we already switched to a doc/sub tab, don't let video grid steal focus
+        if (hadDocsOrSubs) {
+          const preferredId = firstDocTabId || firstSubTabId;
+          if (preferredId) setTimeout(() => TabManager.switchTo(preferredId), 0);
+        }
+      } else if (!hadDocsOrSubs) {
+        TabManager.switchTo(_gridId);
+      }
+    } else {
+      window._chapterVideos = null;
+      renderFileList();
+      if (filesBody && filesBody.style.display !== 'none') toggleSection('files');
+      // If chapter has subdirectories, open dir browser for navigation
+      if (ch.hasSubs && ch.subpath) {
+        DirBrowser.openTab(ch.subpath);
       } else {
-        const url = doc.rel.split('/').map(encodeURIComponent).join('/');
-        TabManager.openTab(url, doc.name, 'custom');
+        // No videos and no subdirs → collapse Panel A
+        if (typeof PanelA !== 'undefined' && !PanelA.minimized) PanelA.toggleMinimize();
       }
     }
   },
 
-  async _openZipViewer(zipRel, zipName) {
-    const tabId = 'zip_' + btoa(unescape(encodeURIComponent(zipRel))).replace(/[^a-z0-9]/gi, '').slice(0, 20);
+  _openVideoGrid(entries, chapterIdx) {
+    const tabId = 'vgrid_' + chapterIdx;
     if (TabManager.tabs.find(t => t.id === tabId)) { TabManager.switchTo(tabId); return; }
+    const tab = { id: tabId, title: '▶ Videos', url: '', type: 'video-grid', chapterIdx, scrollY: 0 };
+    TabManager.tabs.push(tab);
+    TabManager.activeId = tabId;
+    // Ensure Reader panel is in course (tab) mode, not Notes
+    if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
+    const container = document.getElementById('reader-frames-container');
+    const div = document.createElement('div');
+    div.id = `reader-frame-${tabId}`;
+    div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;padding:12px';
+    div.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">${
+      entries.map(v => {
+        const enc = v.localFile.split('/').map(encodeURIComponent).join('/');
+        const sid = v.id.replace(/[^a-z0-9]/gi, '_');
+        const safeEntry = JSON.stringify(v).replace(/"/g,'&quot;');
+        const safeTitle = v.title.replace(/"/g,'&quot;').replace(/</g,'&lt;');
+        let thumb;
+        try { thumb = localStorage.getItem('vt_' + v.id); } catch { thumb = null; }
+        const thumbHtml = thumb
+          ? `<div style="position:relative"><img src="${thumb}" style="width:100%;height:100px;object-fit:cover;display:block;background:#000">
+             <span id="vdur-${sid}" style="position:absolute;bottom:4px;right:4px;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.75);padding:2px 5px;border-radius:4px"></span></div>`
+          : `<div id="vthumb-${sid}" style="width:100%;height:100px;background:#000;position:relative;overflow:hidden">
+               <div id="vspin-${sid}" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;background:rgba(0,0,0,.4)">
+                 <div style="width:18px;height:18px;border:2px solid #3b4fd8;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+               </div>
+               <video src="/${enc}" preload="metadata" muted playsinline
+                      style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1"
+                      onloadedmetadata="CourseDir._videoMeta('${sid}','${v.id}',this)"
+                      onseeked="CourseDir._captureThumbnail('${sid}','${v.id}')"
+                      onerror="CourseDir._thumbError('${sid}')"></video>
+               <span id="vdur-${sid}" style="position:absolute;bottom:4px;right:4px;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.75);padding:2px 5px;border-radius:4px;z-index:3"></span>
+             </div>`;
+        const hasSub = !!v.hasSub;
+        const cardBorder = hasSub ? '#3b5fd8' : '#2d3154';
+        const titleStyle = hasSub ? 'text-decoration:underline;text-underline-offset:2px' : '';
+        return `<div onclick="CourseDir._playGridVideo(${safeEntry})"
+                     style="cursor:pointer;border-radius:8px;overflow:hidden;background:#151829;border:1px solid ${cardBorder};transition:border-color .15s"
+                     onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='${cardBorder}'">
+          ${thumbHtml}
+          <div style="padding:4px 7px;display:flex;align-items:center;gap:4px;min-width:0">
+            <span style="flex:1;min-width:0;font-size:11px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${titleStyle}" title="${safeTitle}">${v.title}</span>
+            <span id="vcap-dur-${sid}" style="flex-shrink:0;font-size:11px;font-weight:600;color:#94a3b8;white-space:nowrap;width:33%;text-align:right"></span>
+          </div>
+        </div>`;
+      }).join('')
+    }</div>`;
+    container.appendChild(div);
+    TabManager._renderTabBar();
+    TabManager._applyActiveTab();
+    TabManager.updateFilterBar();
+    TabManager._save();
+  },
 
-    const tab = { id: tabId, title: '🗜 ' + zipName, url: '', type: 'zip-viewer', scrollY: 0 };
+  _playGridVideo(entry) {
+    Video.click(entry);
+    const filesBody = document.getElementById('files-body');
+    if (filesBody && filesBody.style.display === 'none') toggleSection('files');
+  },
+
+  _videoMeta(sid, videoId, vidEl) {
+    const dur = isFinite(vidEl.duration) ? vidEl.duration : 0;
+    if (dur > 0) {
+      const h = Math.floor(dur / 3600);
+      const m = Math.floor((dur % 3600) / 60);
+      const s = Math.floor(dur % 60);
+      const durStr = h > 0
+        ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+        : `${m}:${String(s).padStart(2,'0')}`;
+      // Write to caption row (1/3 width) — overlay span is legacy
+      const capEl = document.getElementById('vcap-dur-' + sid);
+      if (capEl) capEl.textContent = durStr;
+      const durEl = document.getElementById('vdur-' + sid);
+      if (durEl) durEl.textContent = durStr;
+    }
+    vidEl.currentTime = 3;
+  },
+
+  _captureThumbnail(sid, videoId) {
+    const wrap = document.getElementById('vthumb-' + sid);
+    if (!wrap || wrap.dataset.captured) return;
+    wrap.dataset.captured = '1';
+    const vid = wrap.querySelector('video');
+    if (!vid) return;
+    // Remove spinner
+    const spinner = document.getElementById('vspin-' + sid);
+    if (spinner) spinner.remove();
+    // Wait one animation frame so the decoder has time to paint the frame
+    requestAnimationFrame(() => {
+      const durEl = wrap.querySelector('[id^="vdur-"]');
+      try {
+        const w = vid.videoWidth || 320;
+        const h = vid.videoHeight || Math.round(w * 9 / 16);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(vid, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.style.cssText = 'width:100%;height:100px;object-fit:cover;display:block;background:#000';
+        const durClone = durEl ? durEl.cloneNode(true) : null;
+        wrap.innerHTML = '';
+        wrap.appendChild(img);
+        if (durClone) wrap.appendChild(durClone);
+        try { localStorage.setItem('vt_' + videoId, dataUrl); } catch { /* storage quota */ }
+      } catch {
+        if (spinner) wrap.prepend(spinner);
+      }
+      vid.src = '';
+    });
+  },
+
+  _thumbError(sid) {
+    const wrap = document.getElementById('vthumb-' + sid);
+    if (!wrap || wrap.dataset.captured) return;
+    wrap.dataset.captured = '1';
+    const spinner = document.getElementById('vspin-' + sid);
+    if (spinner) spinner.remove();
+    wrap.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#0a0c1a;color:#3b4fd8">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+    </div>`;
+  },
+
+  async _openZipViewer(zipRel, zipName, chapterIdx = null) {
+    const tabId = 'zip_' + btoa(unescape(encodeURIComponent(zipRel))).replace(/[^a-z0-9]/gi, '').slice(0, 20);
+    const existing = TabManager.tabs.find(t => t.id === tabId);
+    if (existing) { TabManager.switchTo(tabId); return; }
+
+    const tab = { id: tabId, title: '🗜 ' + zipName, url: '', type: 'zip-viewer', chapterIdx, scrollY: 0 };
     TabManager.tabs.push(tab);
     TabManager.activeId = tabId;
     TabManager._renderTabBar();
@@ -3498,7 +4787,160 @@ const CourseDir = {
   _openZipEntry(zipRel, innerPath) {
     const url  = '/api/zip-extract?zip=' + encodeURIComponent(zipRel) + '&entry=' + encodeURIComponent(innerPath);
     const name = innerPath.split('/').pop();
-    TabManager.openTab(url, name, 'custom');
+    TabManager.openTab(url, name, 'custom', this._activeIdx >= 0 ? this._activeIdx : null);
+  },
+
+  // Open a subtitle viewer tab directly from a full .srt/.vtt path
+  async _openSubtitleTabFromPath(srtPath, title, chapterIdx) {
+    try {
+      const content = await fetch(`/api/file-content?path=${encodeURIComponent(srtPath)}`).then(r => r.ok ? r.text() : null);
+      if (!content) { toast('Could not read subtitle file'); return; }
+      const tabId = 'subf_' + btoa(srtPath).replace(/[^a-zA-Z0-9]/g,'').slice(0,20);
+      if (TabManager.tabs.find(t => t.id === tabId)) { TabManager.switchTo(tabId); return; }
+      // Try to find associated video
+      const stem = srtPath.replace(/\.(srt|vtt)$/i, '');
+      const stemName = stem.split('/').pop();
+      let vEntry = null;
+      // Check appConfig
+      const allVids = [...(typeof appConfig !== 'undefined' ? appConfig.videos || [] : [])];
+      let v = allVids.find(v2 => v2.localFile && v2.localFile.replace(/\.[^.]+$/, '') === stemName);
+      if (!v && typeof CourseDir !== 'undefined' && CourseDir._data) {
+        for (const ch of (CourseDir._data.chapters || [])) {
+          v = (ch.videos || []).find(v2 => v2.name.replace(/\.[^.]+$/, '') === stemName);
+          if (v) break;
+        }
+      }
+      if (!v) {
+        // Last resort: assume video at same path with .mp4 extension
+        const videoPath = srtPath.replace(/\.(srt|vtt)$/i, '.mp4');
+        const enc = videoPath.split('/').map(encodeURIComponent).join('/');
+        try {
+          const r = await fetch(enc, { method: 'HEAD' });
+          const size = parseInt(r.headers.get('content-length') || '0', 10);
+          if (r.ok && size > 1024) {
+            vEntry = { id: 'auto_' + encodeURIComponent(videoPath), title: stemName, localFile: videoPath, youtubeId: null, subtitleFile: srtPath };
+          }
+        } catch {}
+      } else {
+        vEntry = v.rel
+          ? { id: 'auto_' + encodeURIComponent(v.rel), title: stemName, localFile: v.rel, youtubeId: null, subtitleFile: srtPath }
+          : { id: v.id, title: v.title || stemName, localFile: v.localFile, youtubeId: v.youtubeId || null, subtitleFile: srtPath };
+      }
+      const cues = this._parseSrt(content);
+      const tab = { id: tabId, title: '📄 ' + stemName + ' (subs)', url: srtPath, type: 'subtitle-viewer', chapterIdx: chapterIdx ?? null, scrollY: 0 };
+      TabManager.tabs.push(tab);
+      const container = document.getElementById('reader-frames-container');
+      const div = document.createElement('div');
+      div.id = `reader-frame-${tabId}`;
+      div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;color:#e2e8f0;font-size:13px;padding:12px 16px';
+      const entryJson = vEntry ? JSON.stringify(vEntry).replace(/"/g, '&quot;') : null;
+      const cueHtml = cues.map(c => {
+        const h = Math.floor(c.time / 3600), m = Math.floor((c.time % 3600) / 60), s = c.time % 60;
+        const ts = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+        const clickAttr = entryJson
+          ? `onclick="Video._seekOnLoad=${c.time};Video._playAfterSeek=true;Video.load(${entryJson})" style="cursor:pointer"`
+          : '';
+        return `<div ${clickAttr} style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
+                     onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+          <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
+          <span style="color:#cbd5e1;line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+        </div>`;
+      }).join('');
+      div.innerHTML = `<div style="margin-bottom:10px;font-size:11px;color:#64748b;border-bottom:1px solid #2d3154;padding-bottom:8px">
+        <span>${cues.length} cues</span>
+        ${entryJson ? '<span style="color:#7c8cf8;margin-left:8px">· click timestamp to seek video</span>' : ''}
+      </div>${cueHtml}`;
+      container.appendChild(div);
+      TabManager.activeId = tabId;
+      TabManager._renderTabBar();
+      TabManager._applyActiveTab();
+      TabManager.updateFilterBar();
+      TabManager._save();
+    } catch (e) { toast('Error opening subtitle file'); }
+  },
+
+  async _openSubtitleTab(basePath, title, chapterIdx) {
+    const exts = ['srt', 'vtt'];
+    for (const ext of exts) {
+      const rel = basePath + '.' + ext;
+      try {
+        const content = await fetch(`/api/file-content?path=${encodeURIComponent(rel)}`).then(r => r.ok ? r.text() : null);
+        if (!content) continue;
+
+        const tabId = 'sub_' + chapterIdx + '_' + encodeURIComponent(title);
+        if (TabManager.tabs.find(t => t.id === tabId)) return;
+
+        // Find associated video entry
+        const chData = this._data?.chapters?.[chapterIdx];
+        const vData = chData ? chData.videos.find(v => v.name.replace(/\.[^.]+$/, '') === title) : null;
+        const vEntry = vData ? {
+          id: 'cdir_' + chapterIdx + '_' + chData.videos.indexOf(vData),
+          title,
+          youtubeId: null,
+          localFile: vData.rel,
+          subtitleFile: rel,
+          hasSub: true
+        } : null;
+        const entryJson = vEntry ? JSON.stringify(vEntry).replace(/"/g, '&quot;') : null;
+
+        const cues = this._parseSrt(content);
+        const tab = { id: tabId, title: '📄 ' + title + ' (subs)', url: rel, type: 'subtitle-viewer', chapterIdx, scrollY: 0 };
+        TabManager.tabs.push(tab);
+
+        const container = document.getElementById('reader-frames-container');
+        const div = document.createElement('div');
+        div.id = `reader-frame-${tabId}`;
+        div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;background:#0f1117;color:#e2e8f0;font-size:13px;padding:12px 16px';
+
+        const cueHtml = cues.map(c => {
+          const h = Math.floor(c.time / 3600);
+          const m = Math.floor((c.time % 3600) / 60);
+          const s = c.time % 60;
+          const ts = h > 0
+            ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+            : `${m}:${String(s).padStart(2,'0')}`;
+          const clickAttr = entryJson
+            ? `onclick="Video._seekOnLoad=${c.time};Video._playAfterSeek=true;Video.load(${entryJson})" style="cursor:pointer"`
+            : '';
+          return `<div ${clickAttr}
+                       style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
+                       onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+            <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
+            <span style="color:#cbd5e1;line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+          </div>`;
+        }).join('');
+
+        div.innerHTML = `<div style="margin-bottom:10px;font-size:11px;color:#64748b;border-bottom:1px solid #2d3154;padding-bottom:8px;display:flex;align-items:center;gap:8px">
+          <span>${cues.length} cues</span>
+          ${entryJson ? '<span style="color:#7c8cf8">· click timestamp to seek video</span>' : ''}
+        </div>${cueHtml}`;
+
+        container.appendChild(div);
+        TabManager._renderTabBar();
+        TabManager._applyActiveTab();
+        TabManager.updateFilterBar();
+        TabManager._save();
+        return;
+      } catch { /* file not found, try next ext */ }
+    }
+  },
+
+  _parseSrt(content) {
+    const cues = [];
+    for (const block of content.split(/\r?\n\r?\n/)) {
+      const lines = block.trim().split(/\r?\n/);
+      let timeLine = null, textStart = 0;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('-->')) { timeLine = lines[i]; textStart = i + 1; break; }
+      }
+      if (!timeLine) continue;
+      const m = timeLine.match(/(\d{1,2}):(\d{2}):(\d{2})[,.](\d+)/);
+      if (!m) continue;
+      const time = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseInt(m[3]);
+      const text = lines.slice(textStart).join(' ').replace(/<[^>]+>/g, '').trim();
+      if (text) cues.push({ time, text });
+    }
+    return cues;
   },
 };
 
@@ -3536,7 +4978,9 @@ function renderFileList() {
   const el = document.getElementById('file-list');
   if (!el || !appConfig) return;
   const extVideos = ExternalVideos.load();
-  const allVideos = [...appConfig.videos, ...extVideos];
+  // window._chapterVideos is set by CourseDir to override with chapter-specific videos
+  const baseVideos = (window._chapterVideos != null) ? window._chapterVideos : (appConfig.videos || []);
+  const allVideos = [...baseVideos, ...extVideos];
   const _hasV = allVideos.length > 0;
   clearTimeout(window._vidPanelTimer);
   if (!_hasV) {
@@ -3551,7 +4995,7 @@ function renderFileList() {
     const delBtn = v._external
       ? `<span onclick="event.stopPropagation();ExternalVideos.delete('${v.id}')" style="color:#64748b;cursor:pointer;flex-shrink:0;padding:2px" title="Remove"><i data-lucide="x" size="10"></i></span>`
       : '';
-    return `<div class="file-item" data-id="${v.id}" onclick="Video.load(${safeV})">
+    return `<div class="file-item" data-id="${v.id}" onclick="Video.click(${safeV})">
       <i data-lucide="${icon}" size="14" style="color:#7c8cf8;flex-shrink:0"></i>
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.title}</span>
       <span style="font-size:10px;color:#64748b">${label}</span>
@@ -3567,6 +5011,7 @@ function renderFileList() {
 async function init() {
   Theme.init();
   Layout.init();
+  PanelC.initResizer();
   Notes.init();
   const verEl = document.getElementById('app-version');
   if (verEl) verEl.textContent = 'v' + APP_VERSION;
@@ -3671,9 +5116,11 @@ async function init() {
   PanelA.init();
   PanelB.init();
   ReaderZoom.init();
+  ReaderMargin.init();
   NotesZoom.init();
   TabManager.init();
   if (_hasBackend) CourseDir.detect();
+  if (_hasBackend) AppUpdater.checkSilent();
   // Auto-save directory session so it appears in the listbox alongside manual sessions
   if (_hasBackend && appConfig._dirId) {
     Sessions.autoSave(appConfig._dirId, appConfig._dirName || appConfig._dirId);
@@ -3764,6 +5211,7 @@ document.addEventListener('keydown', e => {
     ImageViewer.close();
     Share.close();
     Sessions.closeSave();
+    GlobalSearch.close();
   }
 });
 
@@ -3792,8 +5240,16 @@ document.getElementById('share-modal').addEventListener('click', e => {
 document.getElementById('session-save-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('session-save-modal')) Sessions.closeSave();
 });
+document.getElementById('global-search-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('global-search-modal')) GlobalSearch.close();
+});
 
-window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('DOMContentLoaded', () => {
+  init().finally(() => {
+    const ol = document.getElementById('app-loading-overlay');
+    if (ol) { ol.style.opacity = '0'; setTimeout(() => ol.remove(), 450); }
+  });
+});
 </script>
 </body>
 </html>
