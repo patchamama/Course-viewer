@@ -544,6 +544,11 @@
   html.light .file-item { background: #eff6ff; }
   html.light .file-item:hover { border-color: #93c5fd; background: #dbeafe; }
   html.light .file-item.active { border-color: #3b82f6; background: #bfdbfe; }
+  .cdir-item:hover { background: #1e2947; }
+  html.light .cdir-item:hover { background: #e2e8f0; }
+  .cdir-reset-btn:hover { border-color: #f87171 !important; color: #f87171 !important; }
+  html.light .cdir-reset-btn { color: #475569; border-color: #cbd5e1; }
+  html.light .cdir-reset-btn:hover { border-color: #ef4444 !important; color: #ef4444 !important; }
 
   /* ── Tooltip ── */
   [title] { position: relative; }
@@ -1234,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.17';
+const APP_VERSION = '1.1.24';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1460,6 +1465,7 @@ const TabManager = {
   _contentSearch: '',
   _contentMatchIdx: 0,
   _contentMatchCount: 0,
+  _contentIsPhonetic: false,
 
   _tabExt(tab) {
     if (tab.type === 'course') return 'course';
@@ -1623,114 +1629,95 @@ const TabManager = {
     }
   },
 
+  // Shared icon/label maps used by updateFilterBar and helpers
+  _EXT_ICON: {
+    pdf:`<i data-lucide="file-down" size="11"></i>`,epub:`<i data-lucide="book-open" size="11"></i>`,
+    md:`<i data-lucide="file-text" size="11"></i>`,html:`<i data-lucide="code-2" size="11"></i>`,
+    zip:`<i data-lucide="archive" size="11"></i>`,txt:`<i data-lucide="file" size="11"></i>`,
+    images:`<i data-lucide="image" size="11"></i>`,videos:`<i data-lucide="play" size="11"></i>`,
+    srt:`<i data-lucide="subtitles" size="11"></i>`,json:`<i data-lucide="braces" size="11"></i>`,
+    js:`<i data-lucide="code-2" size="11"></i>`,py:`<i data-lucide="code-2" size="11"></i>`,
+    docx:`<i data-lucide="paperclip" size="11"></i>`,other:`<i data-lucide="paperclip" size="11"></i>`,
+  },
+  _EXT_LBL: {
+    pdf:'PDF',epub:'EPUB',md:'MD',html:'HTML',zip:'ZIP',txt:'TXT',images:'IMG',
+    videos:'Video',srt:'SRT',json:'JSON',js:'JS',py:'PY',docx:'DOCX',other:'DOC',
+  },
+
+  _appendContentSearch(bar) {
+    const cntStr = this._contentMatchCount > 0
+      ? (this._contentMatchIdx + 1) + '/' + this._contentMatchCount : '';
+    const searchEl = document.createElement('div');
+    searchEl.style.cssText = 'display:flex;align-items:center;gap:3px;margin-left:6px;flex-shrink:0';
+    searchEl.innerHTML = `<i data-lucide="search" size="11" style="color:#64748b;flex-shrink:0"></i>
+      <input id="rcs-input" type="text" placeholder="Find in content…" value="${this._contentSearch || ''}"
+             oninput="TabManager.contentSearch(this.value)"
+             style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#c4cfe8;font-size:10px;padding:1px 6px;width:90px;outline:none">
+      <span id="rcs-count" style="font-size:10px;color:#64748b;white-space:nowrap;min-width:28px">${cntStr}</span>
+      <button class="btn btn-ghost" style="padding:1px 4px;font-size:11px;line-height:1" onclick="TabManager.contentSearchNav(-1)" title="Previous match">&#8249;</button>
+      <button class="btn btn-ghost" style="padding:1px 4px;font-size:11px;line-height:1" onclick="TabManager.contentSearchNav(1)" title="Next match">&#8250;</button>`;
+    bar.appendChild(searchEl);
+    lucide.createIcons({ el: searchEl });
+  },
+
   updateFilterBar() {
     const bar = document.getElementById('reader-filter-bar');
     if (!bar) return;
-    // Root node active: show aggregate type pills across all chapters
-    const isRootActive = typeof CourseDir !== 'undefined' && CourseDir._activeIdx === -1;
-    if (isRootActive && typeof CourseDir !== 'undefined' && CourseDir._data) {
-      const DOC_ICON = {pdf:`<i data-lucide="file-down" size="11"></i>`,epub:`<i data-lucide="book-open" size="11"></i>`,md:`<i data-lucide="file-text" size="11"></i>`,html:`<i data-lucide="code-2" size="11"></i>`,zip:`<i data-lucide="archive" size="11"></i>`,txt:`<i data-lucide="file" size="11"></i>`,videos:`<i data-lucide="play" size="11"></i>`,srt:`<i data-lucide="subtitles" size="11"></i>`,docx:`<i data-lucide="paperclip" size="11"></i>`};
-      const DOC_LBL = {pdf:'PDF',epub:'EPUB',md:'MD',html:'HTML',zip:'ZIP',txt:'TXT',images:'IMG',videos:'Video',srt:'SRT',docx:'DOCX',other:'DOC'};
-      const rootCounts = {};
-      const _addRC = (name, hasSub) => {
-        const e = name.split('.').pop().toLowerCase();
-        const VIDEO_RE = /^(mp4|mkv|avi|webm|m4v|mov)$/;
-        const MAP = {htm:'html',doc:'docx'};
-        if (VIDEO_RE.test(e)) { rootCounts['videos'] = (rootCounts['videos']||0) + 1; if (hasSub) rootCounts['srt'] = (rootCounts['srt']||0) + 1; }
-        else { const m = MAP[e]||e; rootCounts[m] = (rootCounts[m]||0) + 1; }
-      };
-      if (CourseDir._data.pattern === 'subdirectory') {
-        (CourseDir._data.root_videos || []).forEach(v => _addRC(v.name, v.hasSub));
-        (CourseDir._data.root_docs   || []).forEach(d => _addRC(d.name, false));
-      } else {
-        for (const ch of CourseDir._data.chapters) {
-          ch.videos.forEach(v => _addRC(v.name, v.hasSub));
-          ch.docs.forEach(d => _addRC(d.name, false));
-        }
-      }
-      if (Object.keys(rootCounts).length === 0) { bar.style.display = 'none'; return; }
-      bar.style.display = 'flex';
-      bar.innerHTML = Object.entries(rootCounts).map(([ext, cnt]) => {
-        const icon = DOC_ICON[ext] || `<i data-lucide="paperclip" size="11"></i>`;
-        const lbl = DOC_LBL[ext] || ext.toUpperCase();
-        return `<button class="filter-pill" onclick="CourseDir._openRootType('${ext}')" title="${lbl} (${cnt})" style="display:flex;align-items:center;gap:3px">${icon} ${cnt}</button>`;
-      }).join('');
-      lucide.createIcons({ el: bar });
-      return;
-    }
-    const chTabs = this._activeChapter !== null
-      ? this.tabs.filter(t => t.chapterIdx === this._activeChapter)
-      : [];
-    const _activeTabNow = this.tabs.find(t => t.id === this.activeId);
-    const _needsSearch = _activeTabNow && ['video-grid','subtitle-viewer','markdown','custom','dir-browser'].includes(_activeTabNow.type);
-    if (chTabs.length === 0) {
-      if (!_needsSearch) { bar.style.display = 'none'; return; }
-      // No chapter pills but active tab has searchable content — show bar with only search input
-      bar.style.display = 'flex';
-      bar.innerHTML = '';
-      // fall through to content search append below
+
+    const isRoot = typeof CourseDir !== 'undefined' && CourseDir._activeIdx === -1 && CourseDir._data;
+    const activeTab = this.tabs.find(t => t.id === this.activeId);
+    const needsSearch = activeTab && ['video-grid','subtitle-viewer','markdown','custom','dir-browser'].includes(activeTab.type);
+
+    // --- Determine counts and pill click handler ---
+    let counts = {};
+    let pillClick;      // ext => onclick string
+    let total = 0;
+    let filteredByType = [];
+
+    if (isRoot) {
+      counts = CourseDir.getRootCounts();
+      pillClick = ext => `CourseDir._openRootType('${ext}')`;
+      total = Object.values(counts).reduce((a, b) => a + b, 0);
     } else {
-    const EXT_ICON = {
-      pdf:    `<i data-lucide="file-down" size="11"></i>`,
-      epub:   `<i data-lucide="book-open" size="11"></i>`,
-      md:     `<i data-lucide="file-text" size="11"></i>`,
-      html:   `<i data-lucide="code-2" size="11"></i>`,
-      zip:    `<i data-lucide="archive" size="11"></i>`,
-      txt:    `<i data-lucide="file" size="11"></i>`,
-      images: `<i data-lucide="image" size="11"></i>`,
-      videos: `<i data-lucide="play" size="11"></i>`,
-      srt:    `<i data-lucide="subtitles" size="11"></i>`,
-      json:   `<i data-lucide="braces" size="11"></i>`,
-      js:     `<i data-lucide="code-2" size="11"></i>`,
-      py:     `<i data-lucide="code-2" size="11"></i>`,
-      other:  `<i data-lucide="paperclip" size="11"></i>`,
-    };
-    const EXT_LABEL = {pdf:'PDF',epub:'EPUB',md:'MD',html:'HTML',zip:'ZIP',txt:'TXT',images:'IMG',videos:'Video',srt:'SRT',json:'JSON',js:'JS',py:'PY',other:'DOC'};
-    const counts = {};
-    for (const t of chTabs) {
-      const e = this._tabExt(t);
-      counts[e] = (counts[e] || 0) + 1;
+      const chTabs = this._activeChapter !== null
+        ? this.tabs.filter(t => t.chapterIdx === this._activeChapter) : [];
+      for (const t of chTabs) { const e = this._tabExt(t); counts[e] = (counts[e]||0) + 1; }
+      pillClick = ext => `TabManager.setTypeFilter('${ext}')`;
+      total = chTabs.length;
+      filteredByType = this._typeFilter !== null
+        ? chTabs.filter(t => this._tabExt(t) === this._typeFilter) : [];
     }
-    const filteredByType = this._typeFilter !== null
-      ? chTabs.filter(t => this._tabExt(t) === this._typeFilter) : [];
+
+    if (total === 0 && !needsSearch) { bar.style.display = 'none'; return; }
     bar.style.display = 'flex';
-    const pills = [
-      `<button class="filter-pill${this._typeFilter === null ? ' active' : ''}" onclick="TabManager.setTypeFilter(null)" title="Show all" style="display:flex;align-items:center;gap:3px"><i data-lucide="layout-grid" size="11"></i> ${chTabs.length}</button>`,
-      ...Object.entries(counts).map(([ext, cnt]) => {
-        const icon = EXT_ICON[ext] || `<i data-lucide="paperclip" size="11"></i>`;
-        const lbl  = EXT_LABEL[ext] || ext.toUpperCase();
-        return `<button class="filter-pill${this._typeFilter === ext ? ' active' : ''}" onclick="TabManager.setTypeFilter('${ext}')" title="${lbl}" style="display:flex;align-items:center;gap:3px">${icon} ${cnt}</button>`;
-      }),
-    ];
-    if (this._typeFilter !== null && filteredByType.length > 3) {
-      pills.push(`<input type="text" placeholder="Filter by name…" value="${this._nameFilter || ''}"
-        oninput="TabManager.setNameFilter(this.value)"
-        style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#c4cfe8;font-size:10px;padding:1px 6px;flex:1;min-width:80px;max-width:140px;outline:none">`);
+
+    // --- Build pills ---
+    const pills = [];
+    if (total > 0) {
+      pills.push(`<button class="filter-pill${this._typeFilter === null ? ' active' : ''}" onclick="TabManager.setTypeFilter(null)" title="Show all" style="display:flex;align-items:center;gap:3px"><i data-lucide="layout-grid" size="11"></i> ${total}</button>`);
+      for (const [ext, cnt] of Object.entries(counts)) {
+        const icon = this._EXT_ICON[ext] || `<i data-lucide="paperclip" size="11"></i>`;
+        const lbl  = this._EXT_LBL[ext]  || ext.toUpperCase();
+        pills.push(`<button class="filter-pill${this._typeFilter === ext ? ' active' : ''}" onclick="${pillClick(ext)}" title="${lbl}" style="display:flex;align-items:center;gap:3px">${icon} ${cnt}</button>`);
+      }
+      // Name filter — only for chapters when a type is active and there are many tabs
+      if (!isRoot && this._typeFilter !== null && filteredByType.length > 3) {
+        pills.push(`<input type="text" placeholder="Filter by name…" value="${this._nameFilter || ''}"
+          oninput="TabManager.setNameFilter(this.value)"
+          style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#c4cfe8;font-size:10px;padding:1px 6px;flex:1;min-width:80px;max-width:140px;outline:none">`);
+      }
     }
     bar.innerHTML = pills.join('');
     lucide.createIcons({ el: bar });
-    } // end else (chTabs.length > 0)
-    // Content search — append for any content tab (even when no chapter pills)
-    if (_needsSearch) {
-      const cntStr = this._contentMatchCount > 0
-        ? (this._contentMatchIdx + 1) + '/' + this._contentMatchCount : '';
-      const searchEl = document.createElement('div');
-      searchEl.style.cssText = 'display:flex;align-items:center;gap:3px;margin-left:6px;flex-shrink:0';
-      searchEl.innerHTML = `<i data-lucide="search" size="11" style="color:#64748b;flex-shrink:0"></i>
-        <input id="rcs-input" type="text" placeholder="Find in content…" value="${this._contentSearch || ''}"
-               oninput="TabManager.contentSearch(this.value)"
-               style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#c4cfe8;font-size:10px;padding:1px 6px;width:90px;outline:none">
-        <span id="rcs-count" style="font-size:10px;color:#64748b;white-space:nowrap;min-width:28px">${cntStr}</span>
-        <button class="btn btn-ghost" style="padding:1px 4px;font-size:11px;line-height:1" onclick="TabManager.contentSearchNav(-1)" title="Previous match">&#8249;</button>
-        <button class="btn btn-ghost" style="padding:1px 4px;font-size:11px;line-height:1" onclick="TabManager.contentSearchNav(1)" title="Next match">&#8250;</button>`;
-      bar.appendChild(searchEl);
-      lucide.createIcons({ el: searchEl });
-    }
+
+    // --- Content search (shared) ---
+    if (needsSearch) this._appendContentSearch(bar);
   },
 
   contentSearch(q) {
     this._contentSearch = q.toLowerCase();
     this._contentMatchIdx = 0;
+    this._contentIsPhonetic = false;
     this._applyContentSearch(true);
   },
 
@@ -1744,6 +1731,8 @@ const TabManager = {
     container.querySelectorAll('mark.cv-match, mark.cv-match-cur').forEach(m => {
       m.replaceWith(document.createTextNode(m.textContent));
     });
+    // Clear phonetic outline markers
+    container.querySelectorAll('[style*="f59e0b"]').forEach(el => { el.style.outline = ''; });
     container.normalize();
   },
 
@@ -1797,16 +1786,27 @@ const TabManager = {
     if (tab.type === 'subtitle-viewer') {
       const cues = [...frame.querySelectorAll('.sub-cue')];
       this._clearContentHighlights(frame);
-      cues.forEach(c => c.style.outline = '');
-      const matching = q ? cues.filter(c => (c.dataset.text || '').includes(q)) : [];
+      cues.forEach(c => { c.style.outline = ''; c.style.background = ''; });
+      let matching = q ? cues.filter(c => (c.dataset.text || '').includes(q)) : [];
+      let isPhonetic = false;
+      // Phonetic fallback when no exact matches
+      if (q && matching.length === 0 && typeof GlobalSearch !== 'undefined') {
+        const pKey = GlobalSearch._phoneticNormalize(q);
+        if (pKey && pKey !== q.replace(/\s+/g,' ').trim()) {
+          matching = cues.filter(c => GlobalSearch._phoneticNormalize(c.dataset.text || '').includes(pKey));
+          if (matching.length) isPhonetic = true;
+        }
+      }
+      this._contentIsPhonetic = isPhonetic;
       if (!matching.length) { this._contentMatchCount = 0; this._updateContentSearchUI(); return; }
       if (reset) this._contentMatchIdx = 0;
       this._contentMatchIdx = Math.min(this._contentMatchIdx, matching.length - 1);
       matching.forEach((cue, i) => {
+        const isCurrent = i === this._contentMatchIdx;
         const span = cue.querySelector('span:last-child');
-        if (span) this._highlightInEl(span, q, i === this._contentMatchIdx);
-        if (i === this._contentMatchIdx) {
-          cue.style.outline = '2px solid #7c8cf8';
+        if (!isPhonetic && span) this._highlightInEl(span, q, isCurrent);
+        if (isCurrent) {
+          cue.style.outline = isPhonetic ? '2px solid #f59e0b' : '2px solid #7c8cf8';
           cue.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       });
@@ -1818,13 +1818,25 @@ const TabManager = {
     if (tab.type === 'markdown') {
       this._clearContentHighlights(frame);
       const els = [...frame.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6,td,th')];
-      const matching = q ? els.filter(el => el.textContent.toLowerCase().includes(q)) : [];
+      let matching = q ? els.filter(el => el.textContent.toLowerCase().includes(q)) : [];
+      let isPhonetic = false;
+      // Phonetic fallback when no exact matches
+      if (q && matching.length === 0 && typeof GlobalSearch !== 'undefined') {
+        const pKey = GlobalSearch._phoneticNormalize(q);
+        if (pKey && pKey !== q.replace(/\s+/g,' ').trim()) {
+          matching = els.filter(el => GlobalSearch._phoneticNormalize(el.textContent).includes(pKey));
+          if (matching.length) isPhonetic = true;
+        }
+      }
+      this._contentIsPhonetic = isPhonetic;
       if (!matching.length) { this._contentMatchCount = 0; this._updateContentSearchUI(); return; }
       if (reset) this._contentMatchIdx = 0;
       this._contentMatchIdx = Math.min(this._contentMatchIdx, matching.length - 1);
       matching.forEach((el, i) => {
-        this._highlightInEl(el, q, i === this._contentMatchIdx);
-        if (i === this._contentMatchIdx) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        const isCurrent = i === this._contentMatchIdx;
+        if (!isPhonetic) this._highlightInEl(el, q, isCurrent);
+        else el.style.outline = isCurrent ? '2px solid #f59e0b' : '1px dashed #f59e0b55';
+        if (isCurrent) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       });
       this._contentMatchCount = matching.length;
       this._updateContentSearchUI();
@@ -1856,8 +1868,16 @@ const TabManager = {
   _updateContentSearchUI() {
     const countEl = document.getElementById('rcs-count');
     if (countEl) {
-      countEl.textContent = this._contentMatchCount > 0
-        ? (this._contentMatchIdx + 1) + '/' + this._contentMatchCount : '';
+      if (this._contentMatchCount > 0) {
+        const prefix = this._contentIsPhonetic ? '∼' : '';
+        countEl.textContent = prefix + (this._contentMatchIdx + 1) + '/' + this._contentMatchCount;
+        countEl.title = this._contentIsPhonetic ? 'Phonetic match' : '';
+        countEl.style.color = this._contentIsPhonetic ? '#f59e0b' : '';
+      } else {
+        countEl.textContent = '';
+        countEl.title = '';
+        countEl.style.color = '';
+      }
     }
   },
 
@@ -2076,6 +2096,9 @@ const TabManager = {
     const tab = { id, title, url, type, chapterIdx, scrollY: 0 };
     this.tabs.push(tab);
     this._tabOrigin.set(id, this.activeId);
+    // Clear filters that would hide the newly opened tab
+    const wouldBeHidden = !this._visibleTabs().some(t => t.id === id);
+    if (wouldBeHidden) { this._typeFilter = null; this._nameFilter = ''; }
     if (type === 'markdown') this._createMarkdownFrame(tab);
     else this._createFrame(tab);
     this.activeId = id;
@@ -2096,10 +2119,33 @@ const TabManager = {
     fetch(tab.url)
       .then(r => r.ok ? r.text() : Promise.reject(r.status))
       .then(md => {
+        // Rewrite relative resource paths to be absolute against the markdown file's directory.
+        // Without this, ./images/... in a chapter markdown resolves against the root page URL.
+        const rawUrl = decodeURIComponent(tab.url);
+        const lastSlash = rawUrl.lastIndexOf('/');
+        const baseDir = lastSlash >= 0 ? rawUrl.slice(0, lastSlash + 1) : '';
+        if (baseDir) {
+          const rewriteAttr = (src) => src.replace(
+            /(src|href)="(\.\/|(?!https?:\/\/|\/|#|data:))([^"]*)"/gi,
+            (_, a, _p, rest) => `${a}="${encodeURI(baseDir + rest)}"`
+          ).replace(
+            /(src|href)='(\.\/|(?!https?:\/\/|\/|#|data:))([^']*)'/gi,
+            (_, a, _p, rest) => `${a}='${encodeURI(baseDir + rest)}'`
+          );
+          // Rewrite markdown image and link syntax before parsing.
+          // Pattern captures optional "./" prefix so it isn't doubled in the rewritten URL.
+          const mdRelRe = /(!?\[(?:[^\]]*)\])\((\.\/|(?!https?:|\/|#|data:))([^)#\s][^)]*)\)/g;
+          md = md.replace(mdRelRe, (_, prefix, _dot, rest) =>
+            `${prefix}(${encodeURI(baseDir + rest)})`
+          );
+          // Rewrite raw HTML attrs (src/href) that marked passes through verbatim
+          md = rewriteAttr(md);
+        }
         const html = typeof DOMPurify !== 'undefined'
           ? DOMPurify.sanitize(marked.parse(md))
           : marked.parse(md);
         div.innerHTML = html;
+        div.querySelectorAll('img').forEach(img => { img.loading = 'lazy'; });
       })
       .catch(err => { div.innerHTML = `<p style="color:#f87171">Failed to load: ${err}</p>`; });
     return div;
@@ -2174,7 +2220,7 @@ const TabManager = {
   _save() {
     if (!this._storageKey) return;
     const toSave = this.tabs
-      .filter(t => t.type !== 'dir-browser' && t.type !== 'zip-viewer' && t.type !== 'video-grid')
+      .filter(t => t.type !== 'dir-browser' && t.type !== 'zip-viewer' && t.type !== 'video-grid' && t.type !== 'subtitle-viewer')
       .map(t => {
         const s = {
           id: t.id, title: t.title, type: t.type, scrollY: t.scrollY || 0,
@@ -2853,9 +2899,9 @@ const Sub = {
       for (const sf of v.subtitleFiles) this.loadFile(v.id, sf.lang, sf.file);
     } else if (v.subtitleFile) {
       this.loadFile(v.id, this._detectLang(v.subtitleFile), v.subtitleFile);
-    } else if (v.localFile && v.subtitleFile !== null) {
-      // Auto-detect only when subtitleFile is undefined (omitted from config)
-      // null = explicitly "no subtitle" — skip auto-detect
+    } else if (v.localFile && v.subtitleFile === undefined) {
+      // Auto-detect only when subtitleFile is completely absent from the config object.
+      // null or "" = explicitly "no subtitle" — skip auto-detect.
       const base = v.localFile.replace(/\.(mp4|webm|mkv|avi|mov|m4v)$/i, '');
       this.loadFile(v.id, 'en', base + '.srt');
     }
@@ -2996,12 +3042,13 @@ const Sub = {
     }, 250);
   },
 
-  _delay: 0,  // seconds; positive = subtitles shown later, negative = earlier
+  _delay: parseFloat(localStorage.getItem('oc_sub_delay_ms') || '0') / 1000,
 
   adjustDelay(ms) {
     this._delay = Math.round(this._delay * 1000 + ms) / 1000;
     const el = document.getElementById('sub-delay-val');
     if (el) el.textContent = (this._delay * 1000 >= 0 ? '+' : '') + (this._delay * 1000).toFixed(0) + 'ms';
+    try { localStorage.setItem('oc_sub_delay_ms', String(this._delay * 1000)); } catch(e) {}
   },
 
   showCueAt(t) {
@@ -3045,7 +3092,7 @@ const Sub = {
       for (const [lang, cues] of Object.entries(langMap)) {
         for (const cue of cues) {
           if (cue.text.toLowerCase().includes(lower)) {
-            results.push({ vidId, vidTitle: vidEntry.title, lang, cue });
+            results.push({ vidId, vidTitle: vidEntry.title, lang, cue, phonetic: false });
             if (results.length >= 150) break;
           }
         }
@@ -3054,13 +3101,37 @@ const Sub = {
       if (results.length >= 150) break;
     }
 
+    // Phonetic fallback — normalize both query and each cue text, then match
+    if (results.length === 0 && typeof GlobalSearch !== 'undefined') {
+      const pKey = GlobalSearch._phoneticNormalize(q);
+      if (pKey && pKey !== lower.replace(/\s+/g,' ').trim()) {
+        outer: for (const [vidId, langMap] of Object.entries(allSubtitleCues)) {
+          const vidEntry = appConfig?.videos.find(v => v.id === vidId) || { title: vidId };
+          for (const [lang, cues] of Object.entries(langMap)) {
+            for (const cue of cues) {
+              if (GlobalSearch._phoneticNormalize(cue.text).includes(pKey)) {
+                results.push({ vidId, vidTitle: vidEntry.title, lang, cue, phonetic: true });
+                if (results.length >= 150) break outer;
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (results.length === 0) {
       container.innerHTML = `<div style="color:#64748b;font-size:12px;padding:4px">No results found</div>`;
       return;
     }
 
-    container.innerHTML = results.map(r => {
-      const highlighted = r.cue.text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
+    const isPhonetic = results[0]?.phonetic;
+    const phoneticLabel = isPhonetic
+      ? `<div style="color:#a5b4fc;font-size:10px;padding:2px 4px 4px;display:flex;align-items:center;gap:4px">∼ phonetic: <em>"${GlobalSearch._phoneticNormalize(q)}"</em></div>`
+      : '';
+    container.innerHTML = phoneticLabel + results.map(r => {
+      const highlighted = isPhonetic
+        ? r.cue.text.replace(/</g,'&lt;')
+        : r.cue.text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
       const shortTitle = r.vidTitle.replace(/ELO 25 Basics Flows \(2026\)_?/i, '').substring(0, 22) || r.vidTitle.substring(0, 22);
       return `<div class="sub-result-item" onclick="Sub.jumpTo('${r.vidId}','${r.lang}',${r.cue.start})">
         <span class="ts">${fmt(r.cue.start)}</span>
@@ -4270,8 +4341,7 @@ const DirBrowser = {
         action = `onclick="ImageViewer.open('${encFilePath}')"`;
       } else if (ext === '.srt' || ext === '.vtt') {
         icon = '📝';
-        const srtStem = safeName.replace(/\.(srt|vtt)$/i,'');
-        action = `onclick="TabManager.openTab('${encFilePath}','${safeName}','custom',TabManager._activeChapter)"`;
+        action = `onclick="CourseDir._openSubtitleTabFromPath('${safeFilePath}','${safeName.replace(/\.(srt|vtt)$/i,'')}',TabManager._activeChapter)"`;
       } else if (VIDEO_EXTS.has(ext)) {
         icon = '🎬';
         action = `onclick="Video.click({id:'dir_${encodeURIComponent(f.name)}',title:'${safeName}',localFile:'${safeFilePath}',youtubeId:null,subtitleFile:null})"`;
@@ -4384,6 +4454,35 @@ const GlobalSearch = {
   _prefilter: null,   // null = all; string = only this type group
   _typeFilter: null,  // post-search filter by exact type
   _q: '',
+
+  // Phonetic normalizer: DE/ES/EN rules — used as fallback when exact search returns 0 results
+  _phoneticNormalize(str) {
+    if (!str) return '';
+    let s = str.toLowerCase();
+    // German umlauts
+    s = s.replace(/ä/g,'a').replace(/ö/g,'o').replace(/ü/g,'u').replace(/ß/g,'s');
+    // Spanish accents
+    s = s.replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n');
+    // Digraphs — longest first to avoid partial matches
+    s = s.replace(/sch/g,'\x01').replace(/ch/g,'\x01').replace(/sh/g,'\x01');
+    s = s.replace(/ph/g,'f');
+    s = s.replace(/ck/g,'k');
+    s = s.replace(/qu/g,'k');
+    s = s.replace(/ll/g,'l');
+    // Silent h (not part of digraph above)
+    s = s.replace(/h/g,'');
+    // Sibilants: z/c → s  (c already handled in ck/ch)
+    s = s.replace(/[zc]/g,'s');
+    // i/y → i
+    s = s.replace(/[iy]/g,'i');
+    // w → v  (German w = English v)
+    s = s.replace(/w/g,'v');
+    // Restore digraph placeholder as 's'
+    s = s.replace(/\x01/g,'s');
+    // Collapse repeated chars
+    s = s.replace(/(.)\1+/g,'$1');
+    return s.replace(/\s+/g,' ').trim();
+  },
 
   open() {
     const modal = document.getElementById('global-search-modal');
@@ -4557,8 +4656,7 @@ const GlobalSearch = {
       const matchHtml = file.matches.map(m => {
         const fp = file.file.replace(/\\/g, '/').replace(/'/g, "\\'");
         if (isFolder) {
-          return `<div style="padding:3px 8px;cursor:pointer;border-radius:4px"
-                       onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''"
+          return `<div class="cdir-item" style="padding:3px 8px;cursor:pointer;border-radius:4px"
                        onclick="DirBrowser.openTab('${fp}');GlobalSearch.close()">
                     <span style="font-size:11px;color:#fbbf24">${this._hl(m.text, q)}</span>
                   </div>`;
@@ -4569,8 +4667,7 @@ const GlobalSearch = {
           const clickFn = isVid
             ? `Video.click({id:'search_${encodeURIComponent(fp)}',title:'${fp.split('/').pop().replace(/\.[^.]+$/,'').replace(/'/g,"\\'")}',localFile:'${fp.replace(/'/g,"\\'")}',youtubeId:null,subtitleFile:null});GlobalSearch.close()`
             : `GlobalSearch._openDoc('${fp}',null)`;
-          return `<div style="padding:3px 8px;cursor:pointer;border-radius:4px"
-                       onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''"
+          return `<div class="cdir-item" style="padding:3px 8px;cursor:pointer;border-radius:4px"
                        onclick="${clickFn}">
                     <span style="font-size:11px;color:#e2e8f0">${this._hl(m.text, q)}</span>
                   </div>`;
@@ -4580,15 +4677,13 @@ const GlobalSearch = {
           const timeStr = h > 0
             ? `${h}:${String(mn).padStart(2,'0')}:${String(s).padStart(2,'0')}`
             : `${mn}:${String(s).padStart(2,'0')}`;
-          return `<div style="padding:3px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:flex-start;gap:6px"
-                       onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''"
+          return `<div class="cdir-item" style="padding:3px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:flex-start;gap:6px"
                        onclick="GlobalSearch._openSrt('${fp}',${m.time})">
                     <span style="color:#7c8cf8;font-size:10px;flex-shrink:0;padding-top:2px;min-width:36px">${timeStr}</span>
                     <span style="font-size:11px;color:#cbd5e1">${this._hl(m.text, q)}</span>
                   </div>`;
         }
-        return `<div style="padding:3px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:flex-start;gap:6px"
-                     onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''"
+        return `<div class="cdir-item" style="padding:3px 8px;cursor:pointer;border-radius:4px;display:flex;align-items:flex-start;gap:6px"
                      onclick="GlobalSearch._openDoc('${fp}',${m.line||'null'})">
                   <span style="color:#64748b;font-size:10px;flex-shrink:0;padding-top:2px;min-width:30px">${m.line ? 'L'+m.line : ''}</span>
                   <span style="font-size:11px;color:#cbd5e1">${this._hl(m.text, q)}</span>
@@ -4756,6 +4851,11 @@ const CourseDir = {
     localStorage.setItem(this._visitKey(), JSON.stringify([...v]));
   },
 
+  resetVisited() {
+    localStorage.removeItem(this._visitKey());
+    this._render();
+  },
+
   _toggleAllPills() {
     this._showAllPills = !this._showAllPills;
     this._render();
@@ -4808,13 +4908,13 @@ const CourseDir = {
     // Doc types for root node pills: root-level files only (subdirectory pattern)
     // or aggregate of all chapters (flat-prefix, where all files ARE at root level)
     const rootDocTypes = {};
-    const ROOT_DOC_ICON = {pdf:`<i data-lucide="file-down" size="10"></i>`,epub:`<i data-lucide="book-open" size="10"></i>`,md:`<i data-lucide="file-text" size="10"></i>`,html:`<i data-lucide="code-2" size="10"></i>`,zip:`<i data-lucide="archive" size="10"></i>`,txt:`<i data-lucide="file" size="10"></i>`,videos:`<i data-lucide="play" size="10"></i>`,srt:`<i data-lucide="subtitles" size="10"></i>`};
+    const ROOT_DOC_ICON = {pdf:`<i data-lucide="file-down" size="10"></i>`,epub:`<i data-lucide="book-open" size="10"></i>`,md:`<i data-lucide="file-text" size="10"></i>`,html:`<i data-lucide="code-2" size="10"></i>`,zip:`<i data-lucide="archive" size="10"></i>`,txt:`<i data-lucide="file" size="10"></i>`,videos:`<i data-lucide="play" size="10"></i>`,srt:`<i data-lucide="subtitles" size="10"></i>`,docx:`<i data-lucide="paperclip" size="10"></i>`};
     const _addRootFile = (name, hasSub) => {
       const e = name.split('.').pop().toLowerCase();
       const VIDEO_RE = /^(mp4|mkv|avi|webm|m4v|mov)$/;
       const DOC_RE_MAP = {htm:'html',doc:'docx'};
       if (VIDEO_RE.test(e)) { rootDocTypes['videos'] = (rootDocTypes['videos']||0) + 1; if (hasSub) rootDocTypes['srt'] = (rootDocTypes['srt']||0) + 1; }
-      else { const m = DOC_RE_MAP[e] || e; if (ROOT_DOC_ICON[m]) rootDocTypes[m] = (rootDocTypes[m]||0) + 1; }
+      else { const m = DOC_RE_MAP[e] || e; rootDocTypes[m] = (rootDocTypes[m]||0) + 1; }
     };
     if (this._data.pattern === 'subdirectory') {
       (this._data.root_videos || []).forEach(v => _addRootFile(v.name, v.hasSub));
@@ -4830,13 +4930,12 @@ const CourseDir = {
           `<span onclick="event.stopPropagation();CourseDir._openRootType('${e}')"
                  title="${e.toUpperCase()} (${cnt})"
                  style="display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;white-space:nowrap"
-                 onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'">${ROOT_DOC_ICON[e]} ${cnt}</span>`
+                 onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'">${ROOT_DOC_ICON[e]||'<i data-lucide="paperclip" size="10"></i>'} ${cnt}</span>`
         ).join('')}</div>` : '';
 
     const rootHtml = rootLabel
-      ? `<div style="display:flex;align-items:center;gap:6px;padding:4px 2px 6px 2px;cursor:pointer;border-radius:6px;transition:background .12s"
-              onclick="CourseDir.openRoot()" title="Show root content"
-              onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+      ? `<div class="cdir-item" style="display:flex;align-items:center;gap:6px;padding:4px 2px 6px 2px;cursor:pointer;border-radius:6px;transition:background .12s"
+              onclick="CourseDir.openRoot()" title="Show root content">
            <div style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;background:#312e81;color:#c4b5fd;border:2px solid #4338ca">&#9654;</div>
            <div style="flex:1;min-width:0">
              <div style="font-size:11px;font-weight:700;color:#c4b5fd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:4px">
@@ -4909,9 +5008,8 @@ const CourseDir = {
         // Indented chapter with horizontal branch off the trunk
         return `<div style="display:flex;align-items:flex-start">
           <div style="width:8px;height:2px;background:#2d3154;margin-top:10px;flex-shrink:0"></div>
-          <div data-cdir-idx="${idx}" onclick="CourseDir.openChapter(${idx})"
-               style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;flex:1;min-width:0;padding:2px 4px 4px 0;border-radius:6px;transition:background .12s"
-               onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+          <div class="cdir-item" data-cdir-idx="${idx}" onclick="CourseDir.openChapter(${idx})"
+               style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;flex:1;min-width:0;padding:2px 4px 4px 0;border-radius:6px;transition:background .12s">
             <div class="${bCls}">${bIcon}</div>
             <div style="flex:1;min-width:0;padding-top:1px">
               <div class="${titleCls}">${ch.title}</div>
@@ -4920,9 +5018,8 @@ const CourseDir = {
           </div>
         </div>`;
       } else {
-        return `<div data-cdir-idx="${idx}" onclick="CourseDir.openChapter(${idx})"
-             style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:4px;border-radius:6px;transition:background .12s"
-             onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+        return `<div class="cdir-item" data-cdir-idx="${idx}" onclick="CourseDir.openChapter(${idx})"
+             style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:4px;border-radius:6px;transition:background .12s">
           <div class="${bCls}">${bIcon}</div>
           <div style="flex:1;min-width:0;padding-top:1px">
             <div class="${titleCls}">${ch.title}</div>
@@ -4937,7 +5034,19 @@ const CourseDir = {
       ? `<div style="margin-left:9px;border-left:2px solid #2d3154;padding-left:0">${chaptersHtml}</div>`
       : chaptersHtml;
 
-    list.innerHTML = rootHtml + chaptersContainer;
+    const visitedCount = visited.size;
+    const resetRow = visitedCount > 0
+      ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #2d3154;display:flex;align-items:center;gap:6px">
+           <button class="cdir-reset-btn" onclick="CourseDir.resetVisited()"
+                   title="Clear progress marks — only removes visited-chapter flags from storage"
+                   style="display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b;background:none;border:1px solid #2d3154;border-radius:5px;padding:3px 8px;cursor:pointer">
+             <i data-lucide="video-off" size="11"></i>
+             Reset visited (${visitedCount})
+           </button>
+         </div>`
+      : '';
+
+    list.innerHTML = rootHtml + chaptersContainer + resetRow;
     lucide.createIcons();
   },
 
@@ -4975,12 +5084,16 @@ const CourseDir = {
 
     if (ext === 'videos') {
       const tabId = 'vgrid_root';
-      if (TabManager.tabs.find(t => t.id === tabId)) { TabManager.switchTo(tabId); return; }
-      const entries = rootVideos.map((v, i) => ({
-        id: 'root_' + i, title: v.name.replace(/\.[^.]+$/, ''),
-        youtubeId: null, localFile: v.rel, subtitleFile: null, hasSub: v.hasSub || false,
-      }));
-      this._openVideoGrid(entries, 'root');
+      if (!TabManager.tabs.find(t => t.id === tabId)) {
+        const entries = rootVideos.map((v, i) => ({
+          id: 'root_' + i, title: v.name.replace(/\.[^.]+$/, ''),
+          youtubeId: null, localFile: v.rel, subtitleFile: null, hasSub: v.hasSub || false,
+        }));
+        this._openVideoGrid(entries, 'root');
+      } else {
+        TabManager.switchTo(tabId);
+      }
+      await TabManager.setTypeFilter(ext);
       return;
     }
 
@@ -4999,6 +5112,7 @@ const CourseDir = {
       }
       const first = TabManager.tabs.find(t => t.type === 'subtitle-viewer' && t.chapterIdx === null);
       if (first) TabManager.switchTo(first.id);
+      await TabManager.setTypeFilter(ext);
       return;
     }
 
@@ -5019,6 +5133,7 @@ const CourseDir = {
       }
     }
     if (firstId) TabManager.switchTo(firstId);
+    await TabManager.setTypeFilter(ext);
   },
 
   syncFilterHighlight(ext) {
@@ -5398,7 +5513,7 @@ const CourseDir = {
           ? `onclick="Video._seekOnLoad=${c.time};Video._playAfterSeek=true;Video.load(${entryJson})" style="cursor:pointer"`
           : '';
         return `<div class="sub-cue" data-text="${c.text.replace(/"/g,'&quot;').toLowerCase()}" ${clickAttr} style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
-                     onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+                     onmouseover="this.style.background='#1e2947';this.style.color='#e2e8f0'" onmouseout="this.style.background='';this.style.color=''">
           <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
           <span style="line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
         </div>`;
@@ -5466,7 +5581,7 @@ const CourseDir = {
             : '';
           return `<div class="sub-cue" data-text="${c.text.replace(/"/g,'&quot;').toLowerCase()}" ${clickAttr}
                        style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
-                       onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
+                       onmouseover="this.style.background='#1e2947';this.style.color='#e2e8f0'" onmouseout="this.style.background='';this.style.color=''">
             <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
             <span style="line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
           </div>`;
@@ -5664,6 +5779,7 @@ async function init() {
   // Start loading all subtitles in background so search works before user clicks a video
   Sub.loadAll();
   Sub._initStyleControls();
+  { const el = document.getElementById('sub-delay-val'); if (el && Sub._delay !== 0) el.textContent = (Sub._delay * 1000 >= 0 ? '+' : '') + (Sub._delay * 1000).toFixed(0) + 'ms'; }
 
   // Render markers
   Markers.renderVideoMarkers();

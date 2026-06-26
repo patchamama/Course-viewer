@@ -453,6 +453,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     matches = [n for n in names if not n.endswith('/') and n.rsplit('/', 1)[-1].lower() == bn]
                     if matches: actual = matches[0]
                 if actual is None:
+                    # For image entries not found in the ZIP, return a transparent 1×1 GIF
+                    # instead of a 404 (common with EPUBs that reference non-existent images).
+                    _img_exts = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'}
+                    if os.path.splitext(entry_norm)[1].lower() in _img_exts:
+                        _gif = (b'GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00'
+                                b'!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00'
+                                b'\x01\x00\x00\x02\x02D\x01\x00;')
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'image/gif')
+                        self.send_header('Content-Length', str(len(_gif)))
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        if self.command != 'HEAD':
+                            self.wfile.write(_gif)
+                        return
                     self.send_error(404, 'Entry not found in ZIP')
                     return
                 data = zf.read(actual)
@@ -496,6 +511,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
                 def _rewrite_assets(content, base_dir, epub_rel):
                     """Rewrite relative src/href URLs to /api/zip-extract; verify against ZIP."""
+                    _PLACEHOLDER_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+                    _IMG_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'}
                     def resolve(url):
                         if _re.match(r'(https?:|data:|#|/)', url):
                             return None
@@ -510,13 +527,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         # Verify the path actually exists in the ZIP
                         if resolved not in name_set:
                             bn = resolved.rsplit('/', 1)[-1].lower()
-                            resolved = bn_map.get(bn, resolved)
+                            fallback = bn_map.get(bn)
+                            if fallback:
+                                resolved = fallback
+                            else:
+                                return False  # not in ZIP at all
                         return resolved
                     def replace(m):
                         attr, url = m.group(1), m.group(3)
                         q = m.group(2)
                         resolved = resolve(url)
                         if resolved is None:
+                            return m.group(0)
+                        if resolved is False:
+                            # Missing asset — inline placeholder for images, drop other refs
+                            if attr.lower() == 'src' and os.path.splitext(url)[1].lower() in _IMG_EXTS:
+                                return f'{attr}={q}{_PLACEHOLDER_GIF}{q}'
                             return m.group(0)
                         new_url = ('/api/zip-extract?zip=' + urllib.parse.quote(epub_rel, safe='')
                                    + '&entry=' + urllib.parse.quote(resolved, safe=''))
@@ -886,12 +912,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if not os.path.isfile(filepath):
-            self.send_error(404, f'Not found: {raw}')
-            return
+            # Fallback chain for resource paths that don't exist at their stated location.
+            # 1. Search immediate subdirectories: /images/01/a.jpg → {chapter}/images/01/a.jpg
+            # 2. Insert 'html/' after first segment: {ch}/images/01/a.jpg → {ch}/html/images/01/a.jpg
+            rel_path = raw.lstrip('/')
+            _found = None
+            try:
+                for _sub in sorted(os.listdir(STATIC_DIR)):
+                    _cand = os.path.normpath(os.path.join(STATIC_DIR, _sub, rel_path))
+                    if _cand.startswith(STATIC_DIR) and os.path.isfile(_cand):
+                        _found = _cand
+                        break
+            except Exception:
+                pass
+            if not _found:
+                # Try inserting 'html/' after the first path component.
+                # Handles {chapter}/images/... → {chapter}/html/images/... (markdown asset paths)
+                _parts = rel_path.split('/', 1)
+                if len(_parts) == 2:
+                    _cand = os.path.normpath(os.path.join(STATIC_DIR, _parts[0], 'html', _parts[1]))
+                    if _cand.startswith(STATIC_DIR) and os.path.isfile(_cand):
+                        _found = _cand
+            if _found:
+                filepath = _found
+            else:
+                self.send_error(404, f'Not found: {raw}')
+                return
 
         ext = os.path.splitext(filepath)[1].lower()
         mime = MIME_MAP.get(ext, mimetypes.guess_type(filepath)[0] or 'application/octet-stream')
-        self._send_file(filepath, mime)
+        if ext in ('.html', '.htm'):
+            self._send_html_lazy(filepath, mime)
+        else:
+            self._send_file(filepath, mime)
 
     # ─── Serve any local file by absolute path ───────────────────────────────
     def _serve_file_absolute(self):
@@ -1041,6 +1094,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(500, str(e))
 
     # ─── Shared file sender (Range + moov relocation) ─────────────────────────
+    def _send_html_lazy(self, filepath: str, mime: str):
+        """Serve an HTML file with loading="lazy" injected on every <img> tag."""
+        import re as _re
+        try:
+            with open(filepath, 'rb') as f:
+                data = f.read()
+            data = _re.sub(rb'<img\s', rb'<img loading="lazy" ', data, flags=_re.IGNORECASE)
+            self.send_response(200)
+            self.send_header('Content-Type', mime)
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            if self.command != 'HEAD':
+                self.wfile.write(data)
+        except Exception:
+            self._send_file(filepath, mime)
+
     def _send_file(self, filepath: str, mime: str):
         CHUNK = 512 * 1024
 

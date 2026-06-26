@@ -1,170 +1,147 @@
-# Course Viewer
 
-[![Version](https://img.shields.io/badge/version-1.0.0-7c8cf8?style=flat-square)](https://github.com/patchamama/Course-viewer/releases)
-[![Live](https://img.shields.io/badge/demo-GitHub%20Pages-3b4fd8?style=flat-square)](https://patchamama.github.io/Course-viewer/course-viewer.html)
-[![License](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.8+-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![JavaScript](https://img.shields.io/badge/Vanilla%20JS-ES2022-f7df1e?style=flat-square&logo=javascript&logoColor=black)](course-viewer.html)
-[![HTML5](https://img.shields.io/badge/HTML5-single%20file-e34f26?style=flat-square&logo=html5&logoColor=white)](course-viewer.html)
-[![No dependencies](https://img.shields.io/badge/dependencies-zero-22c55e?style=flat-square)](course-viewer.html)
+# ELO Technical Basics (ELO 25)
 
-**Live demo:** https://patchamama.github.io/Course-viewer/course-viewer.html
+> **Lernpfad für technische Grundlagen der ELO ECM Suite**
 
-```powershell
-# Windows — run in any folder with your course files
-powershell -c "iwr https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.bat -OutFile start.bat"; .\start.bat
-```
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.sh -o start.sh && bash start.sh
-```
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Live-brightgreen?logo=github)](./index.html)
+[![Kategorie](https://img.shields.io/badge/Kategorie-Technical%20Basics-blue)]()
+[![Schwierigkeit](https://img.shields.io/badge/Schwierigkeit-Anf%C3%A4nger-green)]()
+[![Zeit](https://img.shields.io/badge/Dauer-56%20Stunden-orange)]()
+[![Status](https://img.shields.io/badge/Status-Abgeschlossen-success)]()
 
-> A local-first, offline-capable course companion app. Stream local videos with instant seeking, display multilingual subtitles, proxy Articulate Rise courses through localhost, and read PDFs and documents — all from a self-contained tool that runs entirely in your browser with zero cloud dependency.
-
-## Features
-
-### Video Player
-- Stream local MP4, MKV, AVI, WebM with **instant seeking** via in-memory `moov` atom relocation — no re-encoding needed
-- YouTube playback as automatic fallback when local file is missing or 0 bytes
-- Detects YouTube IDs embedded in filenames: `[XXXXXXXXXXX]` and `(XXXXXXXXXXX)` patterns
-- Auto-saves and restores **playback position per video** across sessions and app restarts
-
-### Subtitles
-- SRT and VTT support with automatic multi-language detection
-- **Three display modes**: `Multiline` (full entry with line breaks), `Online` (last line only), `Online Join` (all lines merged into one)
-- Full-text search across all subtitle content with jump-to-timestamp and auto-play on seek
-- Customizable size, background color, background opacity, text color, and on-screen position (arrow controls)
-- All style and position settings persisted in `localStorage`
-
-### Tabbed Course Reader
-- **Multiple documents open simultaneously** as tabs — PDFs, Markdown, HTML, EPUB, TXT
-- Tabs persist per session, isolated per directory (localStorage keyed by directory hash so each course folder is independent)
-- Switching tabs never reloads content (DOM preserved via `visibility:hidden`)
-- **Image gallery tab**: all local images shown as thumbnails; click any image to view it full-size in a modal
-- Articulate Rise course proxied through `localhost` with auto-login script injection and iframe restriction bypass
-- Custom URL or local file input directly in the tab bar
-- Per-document zoom controls
-
-### Course Videos List
-- Displays config videos and user-added external videos in one merged list
-- **Auto-adds** YouTube / local videos to the list when opened via the add-video flow
-- **Save Config** button merges all user-added videos into permanent `course-viewer.config.json`
-- Delete user-added entries individually
-
-### Markers and Notes
-- Video timestamp markers with custom labels
-- Sync bookmarks linking a video timestamp to a reader scroll position
-- Reading position markers for documents
-- Markdown notes editor with live preview (embedded or in bottom panel)
-
-### Self-Bootstrapping Launcher
-- `start.bat` (Windows) and `start.sh` (Mac/Linux) **auto-download** `proxy.py` and `course-viewer.html` from this GitHub repo if they are missing from the folder
-- No installation required beyond Python 3
+> 🇬🇧 [English version](./README_en.md)
 
 ---
 
-## Requirements
-
-| Requirement | Notes |
-|---|---|
-| **Python 3.8+** | [python.org](https://python.org) — add to PATH on Windows |
-| **Internet** (first run only) | Downloads `proxy.py` and `course-viewer.html` from GitHub |
-| No other dependencies | Pure stdlib Python; all JS loaded from CDN |
+<p align="center">
+  <a href="./index.html">
+    <strong>Zum Online-Kurs</strong>
+  </a>
+</p>
 
 ---
 
-## Quick Start
+## Kursinhalte
 
-### Windows
-1. Create a folder for your course content (videos, subtitles, PDFs…)
-2. Download [`start.bat`](https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.bat) into the folder
-3. Double-click `start.bat`
-4. App opens automatically at **http://localhost:8080/**
+Der Lernpfad richtet sich an ELO Einsteiger und vermittelt strukturiert grundlegendes technisches ELO Wissen — von der Installation bis zur Konfiguration der ELO ECM Suite.
 
-### Mac / Linux
-1. Create a folder for your course content
-2. Download [`start.sh`](https://raw.githubusercontent.com/patchamama/Course-viewer/main/start.sh) into the folder
-3. Run: `bash start.sh`
-4. App opens automatically at **http://localhost:8080/**
-
-The launcher auto-downloads `proxy.py` and `course-viewer.html` from GitHub on the first run.
-
----
-
-## Configuration
-
-### Articulate Rise course (optional)
-
-Create `course.readme.txt` in the course folder:
-
-```
-courseUrl: https://share.articulate.com/XXXX#/lessons/YYYY
-coursePassword: YourPassword
-```
-
-### Video files
-
-Place `.mp4` files in the course folder. The launcher auto-detects them and generates `course-viewer.config.json` on first run. Matching `.srt` / `.vtt` subtitle files are loaded automatically by filename.
-
-YouTube ID in filename enables YouTube fallback when the local file is 0 bytes:
-- `Video_Name_[XXXXXXXXXXX].mp4`
-- `Video_Name_(XXXXXXXXXXX).mp4`
-
-### No Articulate course?
-
-If `course.readme.txt` is absent or has no `courseUrl`, the app **auto-detects local files** on startup:
-
-| File type | Action |
-|---|---|
-| PDF, MD, HTML, EPUB, TXT | Opened as reader tabs |
-| PNG, JPG, SVG, WebP, GIF | Collected into an image gallery tab |
-
-### course-viewer.config.json schema
-
-See [`course-viewer.config.json.example`](course-viewer.config.json.example) for the full structure.
+| # | Modul | Html | Pdf | MarkDown | ePub |
+|---|-------|----|----|----|-----|
+| 1 | **[Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md)** | [🌐](./1%20Einfuehung_und_Grundlagen/book.html) | [📄](./1%20Einfuehung_und_Grundlagen/book.pdf) | [📝](./1%20Einfuehung_und_Grundlagen/README.md) | [📖](./1%20Einfuehung_und_Grundlagen/book.epub) |
+| 2 | **[ELO Client](./2%20Elo_Client/README.md)** | [🌐](./2%20Elo_Client/book.html) | [📄](./2%20Elo_Client/book.pdf) | [📝](./2%20Elo_Client/README.md) | [📖](./2%20Elo_Client/book.epub) |
+| 3 | **[ELO Technologien](./3%20ELO_Technologien/README.md)** | [🌐](./3%20ELO_Technologien/book.html) | [📄](./3%20ELO_Technologien/book.pdf) | [📝](./3%20ELO_Technologien/README.md) | [📖](./3%20ELO_Technologien/book.epub) |
+| 4 | **[ELO Module](./4%20ELO_Module/README.md)** | [🌐](./4%20ELO_Module/book.html) | [📄](./4%20ELO_Module/book.pdf) | [📝](./4%20ELO_Module/README.md) | [📖](./4%20ELO_Module/book.epub) |
+| 5 | **[Vertiefungstraining](./5%20Vertiefungstraining/README.md)** | [🌐](./5%20Vertiefungstraining/book.html) | [📄](./5%20Vertiefungstraining/book.pdf) | [📝](./5%20Vertiefungstraining/README.md) | [📖](./5%20Vertiefungstraining/book.epub) |
+|   | [📹 _ELO 25 Basics Training (2026) – Tag 1_Basics](./_ELO%2025%20Basics%20Training%20%282026%29%20Tag1_%5BrMfS2mlJam0%5D.mp4)| — | — | [📑](./_ELO%2025%20Basics%20Training%20%282026%29%20Tag1_%5BrMfS2mlJam0%5D.srt) | — |
+|   | [📹 _ELO 25 Basics Training (2026) – Tag 2_Basics](./_ELO%2025%20Basics%20Training%20%282026%29%20Tag2_%5BMdbSsa1DAWE%5D.mp4) | — | — | [📑](./_ELO%2025%20Basics%20Training%20%282026%29%20Tag2_%5BMdbSsa1DAWE%5D.srt) | — |
+|   | [📹 _ELO 25 Basics Training (2026) – Tag 3_Basics](./_ELO%2025%20Basics%20Training%20%282026%29%20Tag3_%5BCXpLkCD2lMU%5D.mp4) | — | — | [📑](./_ELO%2025%20Basics%20Training%20%282026%29%20Tag3_%5BCXpLkCD2lMU%5D.srt) | — |
+|   | 📦 _Ergänzendes Material_ _(nur lokal)_: [`Academy-backup-documents.eloexp`](./Academy-backup-documents.eloexp), [`Trainingsmaterial.zip`](./Trainingsmaterial.zip) | — | — | — | — |
+|   | 💾 **Installationssoftware**: [Windows Server 2025](https://www.microsoft.com/en-gb/evalcenter/evaluate-windows-server-2025) · [SQL Server 2022](https://www.microsoft.com/en-gb/evalcenter/download-sql-server-2022) · [PostgreSQL](https://www.postgresql.org/download/) | — | — | — | — |
+|   | 🖥️ **Virtuelle Maschinen (Übungsumgebung)**: [🐳 Docker](#) _(ausstehend)_ · [🪟 Hyper-V](#) _(ausstehend)_ · [🏢 Lokales Firmennetzwerk](#) _(ausstehend)_ | — | — | — | — |
+| 6 | **[ELO On-Prem](./6%20ELO_On-Prem/README.md)** | [🌐](./6%20ELO_On-Prem/book.html) | [📄](./6%20ELO_On-Prem/book.pdf) | [📝](./6%20ELO_On-Prem/README.md) | [📖](./6%20ELO_On-Prem/book.epub) |
+| 7 | **[Abschlusstest](./7%20Abschlusstest/README.md)** | [🌐](./7%20Abschlusstest/book.html) | [📄](./7%20Abschlusstest/book.pdf) | [📝](./7%20Abschlusstest/README.md) | [📖](./7%20Abschlusstest/book.epub) |
 
 ---
 
-## Project Structure
+## Lernziel
 
-```
-your-course-folder/
-├── start.bat              ← Windows launcher
-├── start.sh               ← Mac/Linux launcher
-├── course-viewer.html             ← App UI (auto-downloaded from GitHub)
-├── proxy.py               ← Local HTTP proxy server (auto-downloaded)
-├── course.readme.txt      ← Course URL + password (optional, git-ignored)
-├── course-viewer.config.json            ← Generated/saved config (git-ignored)
-├── course-viewer.config.json.example    ← Schema reference
-├── video_[YtId].mp4       ← Video files (git-ignored)
-├── video_[YtId].srt       ← Subtitle files (git-ignored)
-└── document.pdf           ← Local documents (git-ignored, auto-opened as tabs)
-```
+Das Training vermittelt die Grundlagen für die **Installation, Konfiguration und den Betrieb** der ELO ECM Suite. Der Fokus liegt auf:
 
----
+- Konfiguration und Ersteinrichtung von ELO
+- Übersicht über Erweiterungen und Module
+- Praxisnahe Beispiele und Übungen
 
-## Privacy
+## Zielgruppe
 
-Everything runs on `localhost`. No data ever leaves your machine. The proxy routes Articulate Rise through `localhost:8080/proxy/` to bypass iframe restrictions, strips `X-Frame-Options` and `Content-Security-Policy` headers, and injects auto-login when a course password is configured.
+Technisch orientierte Mitarbeiter, die mit der Projektierung und Beratung der Produktlösung beim Kunden beschäftigt sind, sowie Vertriebsmitarbeitende mit guten IT-Kenntnissen.
+
+## So starten Sie
+
+1. Klicken Sie auf **An Lernpfad teilnehmen** — die Rechnung wird Ihnen zugestellt
+2. Beginnen Sie mit **Modul 1: Einführung und Grundlagen** (Module bauen aufeinander auf)
+3. Nach dem Abschlusstest erhalten Sie ein **Zertifikat**
 
 ---
 
-## TODO
+## Videomaterial
 
-- [ ] **Elasticsearch subtitle indexing** — Index all subtitle cues into Elasticsearch for advanced cross-video full-text search. Support multilingual queries (including fuzzy matching, phrase search, and stemming). Expose a REST endpoint consumed by the subtitle search panel, enabling near-instant results across hundreds of hours of content in any language.
-- [ ] EPUB reader integration (epub.js)
-- [ ] Export notes to PDF / DOCX
-- [ ] Keyboard shortcuts overlay
-- [ ] Video speed control (0.5×–2×)
-- [ ] Chapter markers derived from subtitle structure
-- [ ] Right-to-left subtitle support (Arabic, Hebrew, Farsi)
-- [ ] Dark / light theme toggle
-- [ ] Playlist / watch queue with auto-advance to next video
-- [ ] Offline PWA manifest
-- [ ] Multi-device sync via WebSocket
+Kurze Lernvideos aus dem ELO 25 Basics Training 2026 — geordnet nach Modulen.
+
+| # | Modul | Name | 📑 | ⭐ | ↗️ |
+|---|-------|------|----|---|---|
+| 1 | [1. Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md) | [📹 Digitale Transformation von Geschäftsprozessen (1)](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2001%20Digitale%20Transformation%20von%20Gesch%C3%A4ftsprozessen.mp4) | [📑](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2001%20Digitale%20Transformation%20von%20Gesch%C3%A4ftsprozessen.srt) | | 
+| 2 | [1. Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md) | [📹 Digitale Transformation von Geschäftsprozessen (2)](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2002%20Digitale%20Transformation%20von%20Gesch%C3%A4ftsprozessen.mp4) | [📑](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2002%20Digitale%20Transformation%20von%20Gesch%C3%A4ftsprozessen.srt) | | 
+| 3 | [1. Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md) | [📹 Grundlagen der ELO ECM Suite](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2003%20Grundlagen%20der%20ELO%20ECM%20Suite.mp4) | [📑](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2003%20Grundlagen%20der%20ELO%20ECM%20Suite.srt) | | 
+| 4 | [1. Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md) | [📹 Dokumentenpfade](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2004%20Dokumentenpfade.mp4) | [📑](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2004%20Dokumentenpfade.srt) | | 
+| 5 | [1. Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md) | [📹 Dokumentenpfade - Tipps und Tricks](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2005%20Dokumentenpfade%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2005%20Dokumentenpfade%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 6 | [1. Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md) | [📹 Textreader](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2006%20Textreader.mp4) | [📑](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2006%20Textreader.srt) | | 
+| 7 | [1. Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md) | [📹 Passwortregelungen - Benutzer- und Gruppenverwaltung](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2007%20Passwortregelungen%20-%20Benutzer-%20und%20Gruppenverwaltung.mp4) | [📑](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2007%20Passwortregelungen%20-%20Benutzer-%20und%20Gruppenverwaltung.srt) | | 
+| 8 | [1. Einführung und Grundlagen](./1%20Einfuehung_und_Grundlagen/README.md) | [📹 Benutzerimport mit LDAP - Benutzer- und Gruppenverwaltung](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2008%20Benutzerimport%20mit%20LDAP%20-%20Benutzer-%20und%20Gruppenverwaltung.mp4) | [📑](videos/1%20Einf%C3%BChrung%20und%20Grundlagen%20-%2008%20Benutzerimport%20mit%20LDAP%20-%20Benutzer-%20und%20Gruppenverwaltung.srt) | | 
+| 9 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Navigation in ELO - Einführung](videos/2%20ELO%20Client%20-%2001%20Navigation%20in%20ELO%20-%20Einf%C3%BChrung.mp4) | [📑](videos/2%20ELO%20Client%20-%2001%20Navigation%20in%20ELO%20-%20Einf%C3%BChrung.srt) | | 
+| 10 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Dialogoptionen - Dokumentenablage - Tipps und Tricks](videos/2%20ELO%20Client%20-%2002%20Dialogoptionen%20-%20Dokumentenablage%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/2%20ELO%20Client%20-%2002%20Dialogoptionen%20-%20Dokumentenablage%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 11 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Dokumentensperre - Check-out und Check-in - Tipps und Tricks](videos/2%20ELO%20Client%20-%2003%20Dokumentensperre%20-%20Check-out%20und%20Check-in%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/2%20ELO%20Client%20-%2003%20Dokumentensperre%20-%20Check-out%20und%20Check-in%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 12 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Verschlüsselungskreise - Verschlüsselung - Tipps und Tricks](videos/2%20ELO%20Client%20-%2004%20Verschl%C3%BCsselungskreise%20-%20Verschl%C3%BCsselung%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/2%20ELO%20Client%20-%2004%20Verschl%C3%BCsselungskreise%20-%20Verschl%C3%BCsselung%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 13 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Dynamische Ordner - Tipps und Tricks](videos/2%20ELO%20Client%20-%2005%20Dynamische%20Ordner%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/2%20ELO%20Client%20-%2005%20Dynamische%20Ordner%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 14 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Einträge löschen](videos/2%20ELO%20Client%20-%2006%20Eintr%C3%A4ge%20l%C3%B6schen.mp4) | [📑](videos/2%20ELO%20Client%20-%2006%20Eintr%C3%A4ge%20l%C3%B6schen.srt) | | 
+| 15 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Wiedervorlage - Aufgaben im ELO Client](videos/2%20ELO%20Client%20-%2007%20Wiedervorlage%20-%20Aufgaben%20im%20ELO%20Client.mp4) | [📑](videos/2%20ELO%20Client%20-%2007%20Wiedervorlage%20-%20Aufgaben%20im%20ELO%20Client.srt) | | 
+| 16 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Aktive Vertretung - Aufgaben im ELO Client](videos/2%20ELO%20Client%20-%2008%20Aktive%20Vertretung%20-%20Aufgaben%20im%20ELO%20Client.mp4) | [📑](videos/2%20ELO%20Client%20-%2008%20Aktive%20Vertretung%20-%20Aufgaben%20im%20ELO%20Client.srt) | | 
+| 17 | [2. ELO Client](./2%20Elo_Client/README.md) | [📹 Workflows abgeben - Ad-Hoc-Workflows im ELO Client - Tipps und Tricks](videos/2%20ELO%20Client%20-%2009%20Workflows%20abgeben%20-%20Ad-Hoc-Workflows%20im%20ELO%20Client%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/2%20ELO%20Client%20-%2009%20Workflows%20abgeben%20-%20Ad-Hoc-Workflows%20im%20ELO%20Client%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 18 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 Askete erstellen - Metadaten](videos/3%20ELO%20Technologien%20-%2001%20Askete%20erstellen%20-%20Metadaten.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2001%20Askete%20erstellen%20-%20Metadaten.srt) | | 
+| 19 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 Was sind ELO Workspaces?](videos/3%20ELO%20Technologien%20-%2002%20Was%20sind%20ELO%20Workspaces%EF%80%A5.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2002%20Was%20sind%20ELO%20Workspaces%EF%80%A5.srt) | | 
+| 20 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces Tabellenansicht - Die Administration der ELO Workspaces](videos/3%20ELO%20Technologien%20-%2003%20ELO%20Workspaces%20Tabellenansicht%20-%20Die%20Administration%20der%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2003%20ELO%20Workspaces%20Tabellenansicht%20-%20Die%20Administration%20der%20ELO%20Workspaces.srt) | | 
+| 21 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces Dashboard-Ansicht - Die Administration der ELO Workspaces](videos/3%20ELO%20Technologien%20-%2004%20ELO%20Workspaces%20Dashboard-Ansicht%20-%20Die%20Administration%20der%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2004%20ELO%20Workspaces%20Dashboard-Ansicht%20-%20Die%20Administration%20der%20ELO%20Workspaces.srt) | | 
+| 22 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces Kalenderansicht - Die Administration der ELO Workspaces](videos/3%20ELO%20Technologien%20-%2004%20ELO%20Workspaces%20Kalenderansicht%20-%20Die%20Administration%20der%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2004%20ELO%20Workspaces%20Kalenderansicht%20-%20Die%20Administration%20der%20ELO%20Workspaces.srt) | | 
+| 23 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces Kanban-Ansicht - Die Administration der ELO Workspaces](videos/3%20ELO%20Technologien%20-%2004%20ELO%20Workspaces%20Kanban-Ansicht%20-%20Die%20Administration%20der%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2004%20ELO%20Workspaces%20Kanban-Ansicht%20-%20Die%20Administration%20der%20ELO%20Workspaces.srt) | | 
+| 24 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces - Objekt anlegen - Das Arbeiten mit den ELO Workspaces](videos/3%20ELO%20Technologien%20-%2005%20ELO%20Workspaces%20-%20Objekt%20anlegen%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2005%20ELO%20Workspaces%20-%20Objekt%20anlegen%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.srt) | | 
+| 25 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces - Tabelle - Das Arbeiten mit den ELO Workspaces](videos/3%20ELO%20Technologien%20-%2006%20ELO%20Workspaces%20-%20Tabelle%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2006%20ELO%20Workspaces%20-%20Tabelle%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.srt) | | 
+| 26 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces - Kanban-Board - Das Arbeiten mit den ELO Workspaces](videos/3%20ELO%20Technologien%20-%2007%20ELO%20Workspaces%20-%20Kanban-Board%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2007%20ELO%20Workspaces%20-%20Kanban-Board%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.srt) | | 
+| 27 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces - Dashboard-Ansicht - Das Arbeiten mit den ELO Workspaces](videos/3%20ELO%20Technologien%20-%2008%20ELO%20Workspaces%20-%20Dashboard-Ansicht%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2008%20ELO%20Workspaces%20-%20Dashboard-Ansicht%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.srt) | | 
+| 28 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Workspaces - Kalender - Das Arbeiten mit den ELO Workspaces](videos/3%20ELO%20Technologien%20-%2009%20ELO%20Workspaces%20-%20Kalender%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2009%20ELO%20Workspaces%20-%20Kalender%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Workspaces.srt) | | 
+| 29 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 Was sind ELO Teamspaces?](videos/3%20ELO%20Technologien%20-%2010%20Was%20sind%20ELO%20Teamspaces%EF%80%A5.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2010%20Was%20sind%20ELO%20Teamspaces%EF%80%A5.srt) | | 
+| 30 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 ELO Teamspaces Dokumentenbereich - Das Arbeiten mit den ELO Teamspaces](videos/3%20ELO%20Technologien%20-%2011%20ELO%20Teamspaces%20%20Dokumentenbereich%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Teamspaces.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2011%20ELO%20Teamspaces%20%20Dokumentenbereich%20-%20Das%20Arbeiten%20mit%20den%20ELO%20Teamspaces.srt) | | 
+| 31 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 Administration](videos/3%20ELO%20Technologien%20-%2012%20Administration.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2012%20Administration.srt) | | 
+| 32 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 Beispielflow](videos/3%20ELO%20Technologien%20-%2013%20Beispielflow.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2013%20Beispielflow.srt) | | 
+| 33 | [3. ELO Technologien](./3%20ELO_Technologien/README.md) | [📹 Dashboards in Suchergebnissen anzeigen lassen](videos/3%20ELO%20Technologien%20-%2014%20Dashboards%20in%20Suchergebnissen%20anzeigen%20lassen.mp4) | [📑](videos/3%20ELO%20Technologien%20-%2014%20Dashboards%20in%20Suchergebnissen%20anzeigen%20lassen.srt) | | 
+| 34 | [4. ELO Module](./4%20ELO_Module/README.md) | [📹 ELO Sincy Anwendung](videos/4%20ELO%20Module%20%28ELO%2025%29%20-%2001%20ELO%20Sincy%20Anwendung.mp4) | [📑](videos/4%20ELO%20Module%20%28ELO%2025%29%20-%2001%20ELO%20Sincy%20Anwendung.srt) | | 
+| 35 | [4. ELO Module](./4%20ELO_Module/README.md) | [📹 Check-out nach One Drive Im ELO Java Client und Web Client](videos/4%20ELO%20Module%20%28ELO%2025%29%20-%2002%20Check-out%20nach%20One%20Drive%20Im%20ELO%20Java%20Client%20und%20Web%20Client.mp4) | [📑](videos/4%20ELO%20Module%20%28ELO%2025%29%20-%2002%20Check-out%20nach%20One%20Drive%20Im%20ELO%20Java%20Client%20und%20Web%20Client.srt) | | 
+| 36 | [4. ELO Module](./4%20ELO_Module/README.md) | [📹 Check-out nach One Drive Im ELO Desktop Client](videos/4%20ELO%20Module%20%28ELO%2025%29%20-%2003%20Check-out%20nach%20One%20Drive%20Im%20ELO%20Desktop%20Client.mp4) | [📑](videos/4%20ELO%20Module%20%28ELO%2025%29%20-%2003%20Check-out%20nach%20One%20Drive%20Im%20ELO%20Desktop%20Client.srt) | | 
+| 37 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Datenbankuser anlegen - ELO Server Setup – Custom install - Tipps und Tricks](videos/6%20ELO%20On-Prem%20-%2001%20Datenbankuser%20anlegen%20-%20ELO%20Server%20Setup%20%E2%80%93%20Custom%20install%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2001%20Datenbankuser%20anlegen%20-%20ELO%20Server%20Setup%20%E2%80%93%20Custom%20install%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 38 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Tab Confirm - ELO Server Setup – Custom install](videos/6%20ELO%20On-Prem%20-%2002%20Tab%20Confirm%20-%20ELO%20Server%20Setup%20%E2%80%93%20Custom%20install.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2002%20Tab%20Confirm%20-%20ELO%20Server%20Setup%20%E2%80%93%20Custom%20install.srt) | | 
+| 39 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 ELO Server Setup – Custom install - Tipps und Tricks](videos/6%20ELO%20On-Prem%20-%2003%20ELO%20Server%20Setup%20%E2%80%93%20Custom%20install%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2003%20ELO%20Server%20Setup%20%E2%80%93%20Custom%20install%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 40 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Statusseiten - Tipps und Tricks](videos/6%20ELO%20On-Prem%20-%2004%20Statusseiten%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2004%20Statusseiten%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 41 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Java Client AIO Setup - Tipps und Tricks](videos/6%20ELO%20On-Prem%20-%2005%20Java%20Client%20AIO%20Setup%20-%20Tipps%20und%20Tricks.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2005%20Java%20Client%20AIO%20Setup%20-%20Tipps%20und%20Tricks.srt) | ⭐ | 
+| 42 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Windows Active Directory](videos/6%20ELO%20On-Prem%20-%2006%20Windows%20Active%20Directory.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2006%20Windows%20Active%20Directory.srt) | | 
+| 43 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 ELO Backup Service](videos/6%20ELO%20On-Prem%20-%2007%20ELO%20Backup%20Service.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2007%20ELO%20Backup%20Service.srt) | | 
+| 44 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Recovery-Szenario A - Backup-Strategie](videos/6%20ELO%20On-Prem%20-%2008%20Recovery-Szenario%20A%20-%20Backup-Strategie.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2008%20Recovery-Szenario%20A%20-%20Backup-Strategie.srt) | | 
+| 45 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Recovery-Szenario B - Backup-Strategie](videos/6%20ELO%20On-Prem%20-%2009%20Recovery-Szenario%20B%20-%20Backup-Strategie.mp4.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2009%20Recovery-Szenario%20B%20-%20Backup-Strategie.mp4.srt) | | 
+| 46 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 System-Upgrade auf ELOenterprise](videos/6%20ELO%20On-Prem%20-%2010%20System-Upgrade%20auf%20ELOenterprise.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2010%20System-Upgrade%20auf%20ELOenterprise.srt) | | 
+| 47 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Zertificate einspielen - Serverapplications](videos/6%20ELO%20On-Prem%20-%2011%20%20Zertificate%20einspielen%20-%20Serverapplications.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2011%20%20Zertificate%20einspielen%20-%20Serverapplications.srt) | | 
+| 48 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Verschlüsselung für Windows](videos/6%20ELO%20On-Prem%20-%2012%20Verschl%C3%BCsselung%20f%C3%BCr%20Windows.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2012%20Verschl%C3%BCsselung%20f%C3%BCr%20Windows.srt) | | 
+| 49 | [6. ELO On-Prem](./6%20ELO_On-Prem/README.md) | [📹 Zertifikat mittels Portecle importieren - Verschlüsselung Postgres-Datenbank](videos/6%20ELO%20On-Prem%20-%2012%20Zertifikat%20mittels%20Portecle%20importieren%20-%20Verschl%C3%BCsselung%20Postgres-Datenbank.mp4) | [📑](videos/6%20ELO%20On-Prem%20-%2012%20Zertifikat%20mittels%20Portecle%20importieren%20-%20Verschl%C3%BCsselung%20Postgres-Datenbank.srt) | | 
 
 ---
 
-## License
+## ELO Community Links
 
-MIT — do whatever you want with it.
+| Link | Beschreibung |
+|------|-------------|
+| [Start](https://community.elo.com/community/plugin/de.elo.ix.plugin.proxy/wf/apps/app/sol.learning.apps.Courses/?lang=de&#/start) | Startseite der ELO Academy |
+| [Kurskatalog](https://community.elo.com/community/plugin/de.elo.ix.plugin.proxy/wf/apps/app/sol.learning.apps.Courses/?lang=de&#/catalog) | Alle verfügbaren Kurse |
+| [Lernpfade](https://community.elo.com/community/plugin/de.elo.ix.plugin.proxy/wf/apps/app/sol.learning.apps.Courses/?lang=de&#/paths) | Strukturierte Lernpfade |
+| [Mediathek](https://community.elo.com/community/plugin/de.elo.ix.plugin.proxy/wf/apps/app/sol.learning.apps.Courses/?lang=de&#/media) | Videos und Materialien |
+| [Meine Kurse](https://community.elo.com/community/plugin/de.elo.ix.plugin.proxy/wf/apps/app/sol.learning.apps.Courses/?lang=de&#/mycourses) | Persönliche Kursübersicht |
+| [Zertifikate](https://community.elo.com/community/plugin/de.elo.ix.plugin.proxy/wf/apps/app/sol.learning.apps.Courses/?lang=de&#/certificates) | Erworbene Zertifikate |
+
+---
+
+## 📋 Offene Aufgaben
+
+Eine vollständige Liste offener Aufgaben und fehlender lokaler Ressourcen (Videos, Dokumente, Bilder) ist in [`TODO.md`](./TODO.md) dokumentiert.
+
+---
+
+<p align="center">
+  <a href="./index.html">
+    <strong>Zum Online-Kurs</strong>
+  </a>
+</p>
