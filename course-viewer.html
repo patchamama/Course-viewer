@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.25';
+const APP_VERSION = '1.1.26';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -5275,11 +5275,8 @@ const CourseDir = {
                <div id="vspin-${sid}" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;background:rgba(0,0,0,.4)">
                  <div style="width:18px;height:18px;border:2px solid #3b4fd8;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div>
                </div>
-               <video src="/${enc}" preload="metadata" muted playsinline
-                      style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1"
-                      onloadedmetadata="CourseDir._videoMeta('${sid}','${v.id}',this)"
-                      onseeked="CourseDir._captureThumbnail('${sid}','${v.id}')"
-                      onerror="CourseDir._thumbError('${sid}')"></video>
+               <video data-vsrc="/${enc}" data-vsid="${sid}" data-vid="${v.id}" preload="none" muted playsinline
+                      style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1"></video>
                <span id="vdur-${sid}" style="position:absolute;bottom:4px;right:4px;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.75);padding:2px 5px;border-radius:4px;z-index:3"></span>
              </div>`;
         const hasSub = !!v.hasSub;
@@ -5297,6 +5294,7 @@ const CourseDir = {
       }).join('')
     }</div>`;
     container.appendChild(div);
+    CourseDir._startThumbQueue(div);
     TabManager._renderTabBar();
     TabManager._applyActiveTab();
     TabManager.updateFilterBar();
@@ -5307,6 +5305,28 @@ const CourseDir = {
     Video.click(entry);
     const filesBody = document.getElementById('files-body');
     if (filesBody && filesBody.style.display === 'none') toggleSection('files');
+  },
+
+  _thumbQueue: [],
+  _thumbActive: 0,
+
+  _startThumbQueue(container) {
+    container.querySelectorAll('video[data-vsrc]').forEach(vidEl => {
+      this._thumbQueue.push({ vidEl, sid: vidEl.dataset.vsid, videoId: vidEl.dataset.vid });
+    });
+    this._drainThumbQueue();
+  },
+
+  _drainThumbQueue() {
+    while (this._thumbActive < 3 && this._thumbQueue.length > 0) {
+      const { vidEl, sid, videoId } = this._thumbQueue.shift();
+      this._thumbActive++;
+      vidEl.onloadedmetadata = () => CourseDir._videoMeta(sid, videoId, vidEl);
+      vidEl.onseeked        = () => CourseDir._captureThumbnail(sid, videoId);
+      vidEl.onerror         = () => CourseDir._thumbError(sid);
+      vidEl.src = vidEl.dataset.vsrc;
+      vidEl.load();
+    }
   },
 
   _videoMeta(sid, videoId, vidEl) {
@@ -5358,6 +5378,8 @@ const CourseDir = {
         if (spinner) wrap.prepend(spinner);
       }
       vid.src = '';
+      this._thumbActive--;
+      this._drainThumbQueue();
     });
   },
 
@@ -5370,6 +5392,8 @@ const CourseDir = {
     wrap.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#0a0c1a;color:#3b4fd8">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
     </div>`;
+    this._thumbActive--;
+    this._drainThumbQueue();
   },
 
   async _openZipViewer(zipRel, zipName, chapterIdx = null) {
