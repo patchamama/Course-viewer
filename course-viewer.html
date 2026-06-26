@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.24';
+const APP_VERSION = '1.1.25';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -5004,6 +5004,12 @@ const CourseDir = {
       const showPills = isActive || this._showAllPills;
       const pillsHtml = showPills && (videoMeta || docPills || subPill || subfolderPill)
         ? `<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:2px">${videoMeta}${docPills}${subPill}${subfolderPill}</div>` : '';
+      // Content-type icon: video → film strip, docs only → file-text, empty → folder
+      const chIcon = ch.videos.length > 0
+        ? `<i data-lucide="film" size="11" style="flex-shrink:0;margin-top:1px;opacity:.65"></i>`
+        : ch.docs.length > 0
+          ? `<i data-lucide="file-text" size="11" style="flex-shrink:0;margin-top:1px;opacity:.65"></i>`
+          : `<i data-lucide="folder" size="11" style="flex-shrink:0;margin-top:1px;opacity:.65"></i>`;
       if (rootLabel) {
         // Indented chapter with horizontal branch off the trunk
         return `<div style="display:flex;align-items:flex-start">
@@ -5012,7 +5018,7 @@ const CourseDir = {
                style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;flex:1;min-width:0;padding:2px 4px 4px 0;border-radius:6px;transition:background .12s">
             <div class="${bCls}">${bIcon}</div>
             <div style="flex:1;min-width:0;padding-top:1px">
-              <div class="${titleCls}">${ch.title}</div>
+              <div class="${titleCls}" style="display:flex;align-items:center;gap:4px">${chIcon}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${ch.title}</span></div>
               ${pillsHtml}
             </div>
           </div>
@@ -5022,7 +5028,7 @@ const CourseDir = {
              style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;padding:4px;border-radius:6px;transition:background .12s">
           <div class="${bCls}">${bIcon}</div>
           <div style="flex:1;min-width:0;padding-top:1px">
-            <div class="${titleCls}">${ch.title}</div>
+            <div class="${titleCls}" style="display:flex;align-items:center;gap:4px">${chIcon}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${ch.title}</span></div>
             ${pillsHtml}
           </div>
         </div>`;
