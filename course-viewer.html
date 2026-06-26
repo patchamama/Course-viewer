@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.32';
+const APP_VERSION = '1.1.33';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -2009,8 +2009,10 @@ const TabManager = {
     frame.className = 'reader-frame-slot';
     frame.allow = 'autoplay; fullscreen; clipboard-write';
     frame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;visibility:hidden;pointer-events:none;border-radius:8px';
-    if (tab.type !== 'course' && tab.url && !tab.url.startsWith('blob:')) frame.src = tab.url;
-    else if (tab.type !== 'course' && tab.url) frame.src = tab.url;
+    if (tab.type !== 'course' && tab.url) {
+      // Defer loading until tab is activated to avoid ERR_INSUFFICIENT_RESOURCES
+      frame.dataset.lazysrc = tab.url;
+    }
     container.appendChild(frame);
     return frame;
   },
@@ -2050,6 +2052,11 @@ const TabManager = {
       const frame = document.getElementById(`reader-frame-${tab.id}`);
       if (!frame) continue;
       const active = tab.id === this.activeId && visibleIds.has(tab.id);
+      // Lazy-load: assign src only when tab becomes active for the first time
+      if (active && frame.dataset.lazysrc) {
+        frame.src = frame.dataset.lazysrc;
+        delete frame.dataset.lazysrc;
+      }
       frame.style.visibility = active ? 'visible' : 'hidden';
       frame.style.pointerEvents = active ? 'auto' : 'none';
       const noZoom = new Set(['image-viewer','dir-browser','code-viewer','search-results']);
