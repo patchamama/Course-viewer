@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.27';
+const APP_VERSION = '1.1.28';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -5268,7 +5268,8 @@ const CourseDir = {
         const safeTitle = v.title.replace(/"/g,'&quot;').replace(/</g,'&lt;');
         let thumb;
         try { thumb = localStorage.getItem('vt_' + v.id); } catch { thumb = null; }
-        const ytThumbUrl = v.youtubeId ? `https://img.youtube.com/vi/${v.youtubeId}/mqdefault.jpg` : null;
+        const _ytId = v.youtubeId || (v.localFile ? extractYtIdFromFilename(v.localFile) : null);
+        const ytThumbUrl = _ytId ? `https://img.youtube.com/vi/${_ytId}/mqdefault.jpg` : null;
         const thumbHtml = thumb
           ? `<div style="position:relative"><img src="${thumb}" style="width:100%;height:100px;object-fit:cover;display:block;background:#000">
              <span id="vdur-${sid}" style="position:absolute;bottom:4px;right:4px;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.75);padding:2px 5px;border-radius:4px"></span></div>`
