@@ -37,6 +37,11 @@ _download_file() {
 APP_SUBDIR="${TMPDIR:-/tmp}/courseviewer_app"
 mkdir -p "$APP_SUBDIR"
 
+# If app files exist alongside start.sh (dev/local mode), sync them to APPDIR first
+for file in proxy.py course-viewer.html; do
+  [[ -f "$DIR/$file" ]] && cp "$DIR/$file" "$APP_SUBDIR/$file"
+done
+
 _app_files_exist=true
 for file in proxy.py course-viewer.html; do
   [[ ! -f "$APP_SUBDIR/$file" ]] && _app_files_exist=false && break
@@ -162,6 +167,11 @@ EOF
 fi
 
 # ── Start server ─────────────────────────────────────────────────────────────
+_ver=$(grep -o "APP_VERSION = '[0-9][0-9.]*'" "$APP_SUBDIR/course-viewer.html" 2>/dev/null \
+  | grep -o '[0-9][0-9.]*' | head -1)
+echo "  Version: v${_ver:-unknown}"
+echo ""
+
 if ! command -v python3 &>/dev/null; then
   echo "ERROR: python3 is required. Install from https://python.org"
   exit 1

@@ -794,6 +794,10 @@
               <option value="online">Online</option>
               <option value="online-join">Online Join</option>
             </select>
+            <span class="sub-setting-label" style="margin-left:6px">Offset:</span>
+            <button class="btn btn-ghost" style="padding:1px 6px;font-size:13px;line-height:1" onclick="Sub.adjustDelay(-250)" title="Advance subtitles 250ms">−</button>
+            <span id="sub-delay-val" style="font-size:10px;color:#94a3b8;min-width:36px;text-align:center">0ms</span>
+            <button class="btn btn-ghost" style="padding:1px 6px;font-size:13px;line-height:1" onclick="Sub.adjustDelay(250)" title="Delay subtitles 250ms">+</button>
           </div>
         </div>
       </div>
@@ -1230,7 +1234,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.10';
+const APP_VERSION = '1.1.11';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -2743,6 +2747,14 @@ const Sub = {
     }, 250);
   },
 
+  _delay: 0,  // seconds; positive = subtitles shown later, negative = earlier
+
+  adjustDelay(ms) {
+    this._delay = Math.round(this._delay * 1000 + ms) / 1000;
+    const el = document.getElementById('sub-delay-val');
+    if (el) el.textContent = (this._delay * 1000 >= 0 ? '+' : '') + (this._delay * 1000).toFixed(0) + 'ms';
+  },
+
   showCueAt(t) {
     if (!currentVideo || !this.enabled) return;
     const vidCues = allSubtitleCues[currentVideo.id];
@@ -2751,7 +2763,8 @@ const Sub = {
     if (!langCues) return;
     const ov = document.getElementById('subtitle-overlay');
     if (!ov) return;
-    const cue = langCues.find(c => t >= c.start && t <= c.end);
+    const adj = t - (this._delay || 0);
+    const cue = langCues.find(c => adj >= c.start && adj <= c.end);
     if (cue) {
       const displayed = this._applyMode(cue.text);
       const mode = localStorage.getItem('oc_sub_mode') || 'multiline';
@@ -4888,13 +4901,17 @@ const CourseDir = {
       const r = await fetch('/api/zip-list?path=' + encodeURIComponent(zipRel));
       if (!r.ok) throw new Error('Failed');
       const { files } = await r.json();
+      const chIdxStr = chapterIdx !== null && chapterIdx !== undefined ? String(chapterIdx) : '';
       div.innerHTML = `
         <div class="cv-pane-muted" style="font-weight:600;margin-bottom:10px;font-size:12px">${zipName} &mdash; ${files.length} file${files.length !== 1 ? 's' : ''}</div>
         ${files.map(f => `
           <div class="file-item" style="margin-bottom:2px"
-               onclick="CourseDir._openZipEntry(${JSON.stringify(zipRel)}, ${JSON.stringify(f)})">
+               data-zip="${zipRel.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"
+               data-entry="${f.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"
+               data-chidx="${chIdxStr}"
+               onclick="CourseDir._openZipEntry(this.dataset.zip, this.dataset.entry, this.dataset.chidx)">
             <i data-lucide="file" size="13" style="flex-shrink:0"></i>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f}">${f}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f.replace(/"/g,'&quot;')}">${f.replace(/</g,'&lt;')}</span>
           </div>`).join('')}`;
       lucide.createIcons();
     } catch {
@@ -4902,10 +4919,10 @@ const CourseDir = {
     }
   },
 
-  async _openZipEntry(zipRel, innerPath) {
+  async _openZipEntry(zipRel, innerPath, chIdxStr) {
     const name  = innerPath.split('/').pop();
     const ext   = (name.split('.').pop() || '').toLowerCase();
-    const chIdx = this._activeIdx >= 0 ? this._activeIdx : null;
+    const chIdx = (chIdxStr !== '' && chIdxStr !== undefined) ? parseInt(chIdxStr) : (this._activeIdx >= 0 ? this._activeIdx : null);
     const encZ  = encodeURIComponent(zipRel);
     const encE  = encodeURIComponent(innerPath);
     const serveUrl = `/api/zip-serve?zip=${encZ}&entry=${encE}`;
@@ -5009,7 +5026,7 @@ const CourseDir = {
         return `<div ${clickAttr} style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
                      onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
           <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
-          <span style="color:#cbd5e1;line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+          <span style="line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
         </div>`;
       }).join('');
       div.innerHTML = `<div style="margin-bottom:10px;font-size:11px;color:#64748b;border-bottom:1px solid #2d3154;padding-bottom:8px">
@@ -5074,7 +5091,7 @@ const CourseDir = {
                        style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
                        onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
             <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
-            <span style="color:#cbd5e1;line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+            <span style="line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
           </div>`;
         }).join('');
 

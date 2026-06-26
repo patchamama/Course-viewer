@@ -12,6 +12,13 @@ echo Directory: !DIR!
 set "APPDIR=%TEMP%\courseviewer_app"
 if not exist "!APPDIR!" mkdir "!APPDIR!"
 
+:: If app files exist alongside start.bat (dev/local mode), sync them to APPDIR first
+for %%F in (proxy.py course-viewer.html) do (
+    if exist "!DIR!\%%F" (
+        copy /y "!DIR!\%%F" "!APPDIR!\%%F" >nul
+    )
+)
+
 :: ── Decide: fresh install or version check ───────────────────────────────────
 set "_app_files_exist=1"
 if not exist "!APPDIR!\proxy.py"           set "_app_files_exist=0"
@@ -121,6 +128,13 @@ echo.
 :: Kill any existing proxy on this port so the new directory always wins
 for /f "tokens=5" %%P in ('netstat -aon 2^>nul ^| findstr /R ":%PORT% .*LISTENING"') do taskkill /F /PID %%P >nul 2>&1
 ping 127.0.0.1 -n 2 >nul
+
+set "RUNVER=unknown"
+python -c "import re,sys;t=open(sys.argv[1],encoding='utf-8').read();m=re.search('APP_VERSION = .([0-9.]+).',t);print(m.group(1)if m else'',end='')" "!APPDIR!\course-viewer.html" 2>nul > "!APPDIR!\_v.tmp"
+if exist "!APPDIR!\_v.tmp" set /p RUNVER=<"!APPDIR!\_v.tmp"
+del "!APPDIR!\_v.tmp" >nul 2>&1
+echo   Version: v!RUNVER!
+echo.
 
 echo Starting proxy server on port %PORT%...
 echo Course Viewer at: http://localhost:%PORT%/
