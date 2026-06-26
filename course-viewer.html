@@ -1234,7 +1234,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.13';
+const APP_VERSION = '1.1.14';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1732,12 +1732,47 @@ const TabManager = {
     this._applyContentSearch(false);
   },
 
+  _clearContentHighlights(container) {
+    container.querySelectorAll('mark.cv-match, mark.cv-match-cur').forEach(m => {
+      m.replaceWith(document.createTextNode(m.textContent));
+    });
+    container.normalize();
+  },
+
+  _highlightInEl(el, q, isCurrent) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const text = node.textContent;
+      const lower = text.toLowerCase();
+      if (!lower.includes(q)) continue;
+      const frag = document.createDocumentFragment();
+      let last = 0, idx = lower.indexOf(q);
+      while (idx >= 0) {
+        frag.appendChild(document.createTextNode(text.slice(last, idx)));
+        const mark = document.createElement('mark');
+        mark.className = isCurrent ? 'cv-match-cur' : 'cv-match';
+        mark.style.cssText = isCurrent
+          ? 'background:#7c8cf8;color:#fff;border-radius:2px;padding:0 1px;outline:2px solid #a5b4fc'
+          : 'background:rgba(124,140,248,0.35);border-radius:2px;padding:0 1px';
+        mark.textContent = text.slice(idx, idx + q.length);
+        frag.appendChild(mark);
+        last = idx + q.length;
+        idx = lower.indexOf(q, last);
+      }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    }
+  },
+
   _applyContentSearch(reset) {
     const q = this._contentSearch;
     const tab = this.tabs.find(t => t.id === this.activeId);
     if (!tab) return;
     const frame = document.getElementById('reader-frame-' + this.activeId);
     if (!frame) return;
+
     if (tab.type === 'video-grid') {
       let count = 0;
       frame.querySelectorAll('.vgrid-card').forEach(card => {
@@ -1750,31 +1785,45 @@ const TabManager = {
       this._updateContentSearchUI();
       return;
     }
+
     if (tab.type === 'subtitle-viewer') {
       const cues = [...frame.querySelectorAll('.sub-cue')];
+      this._clearContentHighlights(frame);
+      cues.forEach(c => c.style.outline = '');
       const matching = q ? cues.filter(c => (c.dataset.text || '').includes(q)) : [];
-      cues.forEach(c => { c.style.outline = ''; });
       if (!matching.length) { this._contentMatchCount = 0; this._updateContentSearchUI(); return; }
       if (reset) this._contentMatchIdx = 0;
       this._contentMatchIdx = Math.min(this._contentMatchIdx, matching.length - 1);
-      matching[this._contentMatchIdx].style.outline = '2px solid #7c8cf8';
-      matching[this._contentMatchIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      matching.forEach((cue, i) => {
+        const span = cue.querySelector('span:last-child');
+        if (span) this._highlightInEl(span, q, i === this._contentMatchIdx);
+        if (i === this._contentMatchIdx) {
+          cue.style.outline = '2px solid #7c8cf8';
+          cue.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
       this._contentMatchCount = matching.length;
       this._updateContentSearchUI();
       return;
     }
+
     if (tab.type === 'markdown') {
-      const els = [...frame.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6')];
+      this._clearContentHighlights(frame);
+      const els = [...frame.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6,td,th')];
       const matching = q ? els.filter(el => el.textContent.toLowerCase().includes(q)) : [];
       if (!matching.length) { this._contentMatchCount = 0; this._updateContentSearchUI(); return; }
       if (reset) this._contentMatchIdx = 0;
       this._contentMatchIdx = Math.min(this._contentMatchIdx, matching.length - 1);
-      matching[this._contentMatchIdx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      matching.forEach((el, i) => {
+        this._highlightInEl(el, q, i === this._contentMatchIdx);
+        if (i === this._contentMatchIdx) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
       this._contentMatchCount = matching.length;
       this._updateContentSearchUI();
       return;
     }
-    // iframe (custom type)
+
+    // iframe (custom type) — browser native find
     const iframes = frame.tagName === 'IFRAME' ? [frame] : frame.querySelectorAll('iframe');
     const target = iframes[0];
     if (target && q) {
