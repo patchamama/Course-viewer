@@ -1234,7 +1234,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.14';
+const APP_VERSION = '1.1.15';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1661,7 +1661,15 @@ const TabManager = {
     const chTabs = this._activeChapter !== null
       ? this.tabs.filter(t => t.chapterIdx === this._activeChapter)
       : [];
-    if (chTabs.length === 0) { bar.style.display = 'none'; return; }
+    const _activeTabNow = this.tabs.find(t => t.id === this.activeId);
+    const _needsSearch = _activeTabNow && ['video-grid','subtitle-viewer','markdown','custom','dir-browser'].includes(_activeTabNow.type);
+    if (chTabs.length === 0) {
+      if (!_needsSearch) { bar.style.display = 'none'; return; }
+      // No chapter pills but active tab has searchable content — show bar with only search input
+      bar.style.display = 'flex';
+      bar.innerHTML = '';
+      // fall through to content search append below
+    } else {
     const EXT_ICON = {
       pdf:    `<i data-lucide="file-down" size="11"></i>`,
       epub:   `<i data-lucide="book-open" size="11"></i>`,
@@ -1701,9 +1709,9 @@ const TabManager = {
     }
     bar.innerHTML = pills.join('');
     lucide.createIcons({ el: bar });
-    // Content search — append after pills for content tabs
-    const activeTab = this.tabs.find(t => t.id === this.activeId);
-    if (activeTab && ['video-grid','subtitle-viewer','markdown','custom'].includes(activeTab.type)) {
+    } // end else (chTabs.length > 0)
+    // Content search — append for any content tab (even when no chapter pills)
+    if (_needsSearch) {
       const cntStr = this._contentMatchCount > 0
         ? (this._contentMatchIdx + 1) + '/' + this._contentMatchCount : '';
       const searchEl = document.createElement('div');
@@ -1823,6 +1831,18 @@ const TabManager = {
       return;
     }
 
+    if (tab.type === 'dir-browser') {
+      let count = 0;
+      frame.querySelectorAll('.db-file-row').forEach(row => {
+        const show = !q || (row.dataset.name || '').includes(q);
+        row.style.display = show ? '' : 'none';
+        if (show) count++;
+      });
+      this._contentMatchCount = count;
+      this._contentMatchIdx = 0;
+      this._updateContentSearchUI();
+      return;
+    }
     // iframe (custom type) — browser native find
     const iframes = frame.tagName === 'IFRAME' ? [frame] : frame.querySelectorAll('iframe');
     const target = iframes[0];
@@ -4257,7 +4277,7 @@ const DirBrowser = {
         action = `onclick="Video.click({id:'dir_${encodeURIComponent(f.name)}',title:'${safeName}',localFile:'${safeFilePath}',youtubeId:null,subtitleFile:null})"`;
       }
       const iconHtml = thumb || `<span style="font-size:13px;flex-shrink:0;min-width:16px;text-align:center">${icon}</span>`;
-      return `<div class="db-row" style="display:flex;align-items:center;gap:8px;cursor:pointer" ${action}>
+      return `<div class="db-row db-file-row" data-name="${f.name.toLowerCase().replace(/"/g,'&quot;')}" style="display:flex;align-items:center;gap:8px;cursor:pointer" ${action}>
         ${iconHtml}
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</span>
         <span style="color:#64748b;font-size:10px;flex-shrink:0">${sizeStr}</span>
