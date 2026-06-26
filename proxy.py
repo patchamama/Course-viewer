@@ -332,7 +332,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for se in SUB_EXTS:
                 if os.path.isfile(base_path + se):
                     return True, rel_base + se
-                matches = sorted(_glob.glob(base_path + '.*' + se))
+                # Escape metacharacters (e.g. '[', ']' from YouTube IDs) before globbing
+                matches = sorted(_glob.glob(_glob.escape(base_path) + '.*' + se))
                 if matches:
                     suffix = matches[0][len(base_path):]  # e.g. ".de.srt"
                     return True, rel_base + suffix
@@ -919,6 +920,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if not os.path.isfile(filepath):
+            # 0. Double-decode fallback: HTML docs often contain double-encoded video src
+            #    attributes (e.g. %2520 instead of %20). One unquote leaves %20 which won't
+            #    match a file with actual spaces — a second unquote resolves it.
+            _raw2 = urllib.parse.unquote(raw)
+            if _raw2 != raw:
+                _fp2 = os.path.normpath(os.path.join(base_dir, _raw2.lstrip('/')))
+                if _fp2.startswith(base_dir) and os.path.isfile(_fp2):
+                    filepath = _fp2
+
+        if not os.path.isfile(filepath):
             # Fallback chain for resource paths that don't exist at their stated location.
             # 1. Search immediate subdirectories: /images/01/a.jpg → {chapter}/images/01/a.jpg
             # 2. Insert 'html/' after first segment: {ch}/images/01/a.jpg → {ch}/html/images/01/a.jpg
@@ -940,6 +951,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     _cand = os.path.normpath(os.path.join(STATIC_DIR, _parts[0], 'html', _parts[1]))
                     if _cand.startswith(STATIC_DIR) and os.path.isfile(_cand):
                         _found = _cand
+            if not _found:
+                # Strip 'html/' from {chapter}/html/{subpath} paths.
+                # Handles HTML docs whose <video src="videos/file.mp4"> resolves as
+                # {chapter}/html/videos/file.mp4 but the file lives at {chapter}/file.mp4
+                # or {chapter}/videos/file.mp4 (i.e. html/ was an extra level).
+                try:
+                    _segs = rel_path.split('/')
+                    _hi = _segs.index('html')
+                    # Try without 'html/' keeping all remaining components
+                    _c1 = '/'.join(_segs[:_hi] + _segs[_hi + 1:])
+                    _cand = os.path.normpath(os.path.join(STATIC_DIR, _c1))
+                    if _cand.startswith(STATIC_DIR) and os.path.isfile(_cand):
+                        _found = _cand
+                    # Try also stripping one more directory after 'html/' (e.g. 'videos/')
+                    elif _hi + 2 < len(_segs):
+                        _c2 = '/'.join(_segs[:_hi] + _segs[_hi + 2:])
+                        _cand2 = os.path.normpath(os.path.join(STATIC_DIR, _c2))
+                        if _cand2.startswith(STATIC_DIR) and os.path.isfile(_cand2):
+                            _found = _cand2
+                except ValueError:
+                    pass
             if _found:
                 filepath = _found
             else:
@@ -948,7 +980,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         ext = os.path.splitext(filepath)[1].lower()
         mime = MIME_MAP.get(ext, mimetypes.guess_type(filepath)[0] or 'application/octet-stream')
-        if ext in ('.html', '.htm'):
+        # Apply lazy-loading injection only to course content HTML, NOT to app files
+        # (course-viewer.html has <video> inside JS template literals — injecting
+        # preload="none" there breaks the local video player).
+        if ext in ('.html', '.htm') and base_dir != APP_DIR:
             self._send_html_lazy(filepath, mime)
         else:
             self._send_file(filepath, mime)
