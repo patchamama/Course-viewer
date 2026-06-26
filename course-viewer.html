@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.28';
+const APP_VERSION = '1.1.29';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -5074,6 +5074,33 @@ const CourseDir = {
           });
       if (has) { await this.filterChapter(i, ext); return; }
     }
+  },
+
+  getRootCounts() {
+    if (!this._data) return {};
+    const counts = {};
+    const VIDEO_RE = /^(mp4|mkv|avi|webm|m4v|mov)$/;
+    const DOC_RE_MAP = { htm: 'html', doc: 'docx' };
+    const add = (name, hasSub) => {
+      const e = name.split('.').pop().toLowerCase();
+      if (VIDEO_RE.test(e)) {
+        counts['videos'] = (counts['videos'] || 0) + 1;
+        if (hasSub) counts['srt'] = (counts['srt'] || 0) + 1;
+      } else {
+        const m = DOC_RE_MAP[e] || e;
+        counts[m] = (counts[m] || 0) + 1;
+      }
+    };
+    if (this._data.pattern === 'subdirectory') {
+      (this._data.root_videos || []).forEach(v => add(v.name, v.hasSub));
+      (this._data.root_docs   || []).forEach(d => add(d.name, false));
+    } else {
+      for (const ch of this._data.chapters) {
+        ch.videos.forEach(v => add(v.name, v.hasSub));
+        ch.docs.forEach(d => add(d.name, false));
+      }
+    }
+    return counts;
   },
 
   // Opens root-level files of a given type (subdirectory pattern only).
