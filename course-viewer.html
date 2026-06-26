@@ -1234,7 +1234,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.11';
+const APP_VERSION = '1.1.12';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1454,8 +1454,12 @@ const TabManager = {
   activeId: null,
   _storageKey: null,
   _activeChapter: null,  // null = show all; number = show only that chapter's tabs
+  _tabOrigin: new Map(),  // tabId → prevActiveId at time of tab creation
 
   _typeFilter: null,  // null = all; string = show only this extension
+  _contentSearch: '',
+  _contentMatchIdx: 0,
+  _contentMatchCount: 0,
 
   _tabExt(tab) {
     if (tab.type === 'course') return 'course';
@@ -1483,21 +1487,22 @@ const TabManager = {
   async setTypeFilter(ext) {
     if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
     if (ext === null) {
-      // "Show all" — only way to deactivate filter
+      // Show All: reopen all closed chapter tabs, then deactivate filter
       this._typeFilter = null;
       this._nameFilter = '';
+      await this._reopenAllChapterTabs();
       const visible = this._visibleTabs();
       if (!visible.find(t => t.id === this.activeId)) this.activeId = visible[0]?.id || null;
       this._finishFilter();
       return;
     }
     if (this._typeFilter === ext) {
-      // Same filter: cycle to next tab of same type, never deactivate
-      const matching = this._visibleTabs().filter(t => this._tabExt(t) === ext);
-      if (matching.length > 1) {
-        const cur = matching.findIndex(t => t.id === this.activeId);
-        this.activeId = matching[(cur + 1) % matching.length].id;
-      }
+      // Same filter clicked: hard reset — deactivate then immediately reactivate
+      this._typeFilter = null;
+      this._nameFilter = '';
+      this._finishFilter();
+      this._typeFilter = ext;
+      await this._reopenAndSwitchToType(ext);
       this._finishFilter();
       return;
     }
@@ -1506,6 +1511,50 @@ const TabManager = {
     this._nameFilter = '';
     await this._reopenAndSwitchToType(ext);
     this._finishFilter();
+  },
+
+  async _reopenAllChapterTabs() {
+    if (this._activeChapter === null || typeof CourseDir === 'undefined' || !CourseDir._data) return;
+    const chIdx = this._activeChapter;
+    const ch = CourseDir._data.chapters?.[chIdx];
+    if (!ch) return;
+    const prevActive = this.activeId;
+    // Video grid
+    if (ch.videos?.length > 0 && !this.tabs.find(t => t.id === 'vgrid_' + chIdx)) {
+      const entries = ch.videos.map((v, i) => ({
+        id: 'cdir_' + chIdx + '_' + i, title: v.name.replace(/\.[^.]+$/, ''),
+        youtubeId: null, localFile: v.rel, subtitleFile: null, hasSub: v.hasSub || false,
+      }));
+      CourseDir._openVideoGrid(entries, chIdx);
+      this.activeId = prevActive;
+    }
+    // Docs
+    for (const doc of (ch.docs || [])) {
+      if (doc.name.toLowerCase().endsWith('.zip')) {
+        if (!this.tabs.find(t => t.type === 'zip-viewer' && t.chapterIdx === chIdx && t.title === '🗜 ' + doc.name || t.title === doc.name)) {
+          await CourseDir._openZipViewer(doc.rel, doc.name, chIdx);
+          this.activeId = prevActive;
+        }
+      } else {
+        const url = doc.rel.split('/').map(encodeURIComponent).join('/');
+        if (!this.tabs.find(t => t.url === url)) {
+          this.openTab(url, doc.name, 'custom', chIdx);
+          this.activeId = prevActive;
+        }
+      }
+    }
+    // Subtitles
+    for (const v of (ch.videos || [])) {
+      if (!v.hasSub) continue;
+      const stem = v.name.replace(/\.[^.]+$/, '');
+      const existing = this.tabs.find(t => t.type === 'subtitle-viewer' && t.chapterIdx === chIdx
+        && t.title.toLowerCase().includes(stem.toLowerCase().substring(0, 20)));
+      if (!existing) {
+        const subRel = (ch.subpath ? ch.subpath + '/' : '') + stem;
+        await CourseDir._openSubtitleTab(subRel, stem, chIdx);
+        this.activeId = prevActive;
+      }
+    }
   },
 
   _finishFilter() {
@@ -1577,6 +1626,31 @@ const TabManager = {
   updateFilterBar() {
     const bar = document.getElementById('reader-filter-bar');
     if (!bar) return;
+    // Root node active: show aggregate type pills across all chapters
+    const isRootActive = typeof CourseDir !== 'undefined' && CourseDir._activeIdx === -1;
+    if (isRootActive && typeof CourseDir !== 'undefined' && CourseDir._data) {
+      const DOC_ICON = {pdf:`<i data-lucide="file-down" size="11"></i>`,epub:`<i data-lucide="book-open" size="11"></i>`,md:`<i data-lucide="file-text" size="11"></i>`,html:`<i data-lucide="code-2" size="11"></i>`,zip:`<i data-lucide="archive" size="11"></i>`,txt:`<i data-lucide="file" size="11"></i>`,videos:`<i data-lucide="play" size="11"></i>`,srt:`<i data-lucide="subtitles" size="11"></i>`,docx:`<i data-lucide="paperclip" size="11"></i>`};
+      const DOC_LBL = {pdf:'PDF',epub:'EPUB',md:'MD',html:'HTML',zip:'ZIP',txt:'TXT',images:'IMG',videos:'Video',srt:'SRT',docx:'DOCX',other:'DOC'};
+      const rootCounts = {};
+      for (const ch of CourseDir._data.chapters) {
+        if (ch.videos.length) rootCounts['videos'] = (rootCounts['videos'] || 0) + ch.videos.length;
+        ch.videos.forEach(v => { if (v.hasSub) rootCounts['srt'] = (rootCounts['srt'] || 0) + 1; });
+        ch.docs.forEach(d => {
+          const e = d.name.split('.').pop().toLowerCase();
+          const m = e === 'htm' ? 'html' : e === 'doc' ? 'docx' : e;
+          rootCounts[m] = (rootCounts[m] || 0) + 1;
+        });
+      }
+      if (Object.keys(rootCounts).length === 0) { bar.style.display = 'none'; return; }
+      bar.style.display = 'flex';
+      bar.innerHTML = Object.entries(rootCounts).map(([ext, cnt]) => {
+        const icon = DOC_ICON[ext] || `<i data-lucide="paperclip" size="11"></i>`;
+        const lbl = DOC_LBL[ext] || ext.toUpperCase();
+        return `<button class="filter-pill" onclick="CourseDir._filterAnyChapterByType('${ext}')" title="${lbl} (${cnt})" style="display:flex;align-items:center;gap:3px">${icon} ${cnt}</button>`;
+      }).join('');
+      lucide.createIcons({ el: bar });
+      return;
+    }
     const chTabs = this._activeChapter !== null
       ? this.tabs.filter(t => t.chapterIdx === this._activeChapter)
       : [];
@@ -1620,12 +1694,104 @@ const TabManager = {
     }
     bar.innerHTML = pills.join('');
     lucide.createIcons({ el: bar });
+    // Content search — append after pills for content tabs
+    const activeTab = this.tabs.find(t => t.id === this.activeId);
+    if (activeTab && ['video-grid','subtitle-viewer','markdown','custom'].includes(activeTab.type)) {
+      const cntStr = this._contentMatchCount > 0
+        ? (this._contentMatchIdx + 1) + '/' + this._contentMatchCount : '';
+      const searchEl = document.createElement('div');
+      searchEl.style.cssText = 'display:flex;align-items:center;gap:3px;margin-left:6px;flex-shrink:0';
+      searchEl.innerHTML = `<i data-lucide="search" size="11" style="color:#64748b;flex-shrink:0"></i>
+        <input id="rcs-input" type="text" placeholder="Find in content…" value="${this._contentSearch || ''}"
+               oninput="TabManager.contentSearch(this.value)"
+               style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#c4cfe8;font-size:10px;padding:1px 6px;width:90px;outline:none">
+        <span id="rcs-count" style="font-size:10px;color:#64748b;white-space:nowrap;min-width:28px">${cntStr}</span>
+        <button class="btn btn-ghost" style="padding:1px 4px;font-size:11px;line-height:1" onclick="TabManager.contentSearchNav(-1)" title="Previous match">&#8249;</button>
+        <button class="btn btn-ghost" style="padding:1px 4px;font-size:11px;line-height:1" onclick="TabManager.contentSearchNav(1)" title="Next match">&#8250;</button>`;
+      bar.appendChild(searchEl);
+      lucide.createIcons({ el: searchEl });
+    }
+  },
+
+  contentSearch(q) {
+    this._contentSearch = q.toLowerCase();
+    this._contentMatchIdx = 0;
+    this._applyContentSearch(true);
+  },
+
+  contentSearchNav(dir) {
+    if (!this._contentMatchCount) return;
+    this._contentMatchIdx = ((this._contentMatchIdx + dir) + this._contentMatchCount) % this._contentMatchCount;
+    this._applyContentSearch(false);
+  },
+
+  _applyContentSearch(reset) {
+    const q = this._contentSearch;
+    const tab = this.tabs.find(t => t.id === this.activeId);
+    if (!tab) return;
+    const frame = document.getElementById('reader-frame-' + this.activeId);
+    if (!frame) return;
+    if (tab.type === 'video-grid') {
+      let count = 0;
+      frame.querySelectorAll('.vgrid-card').forEach(card => {
+        const show = !q || (card.dataset.vtitle || '').includes(q);
+        card.style.display = show ? '' : 'none';
+        if (show) count++;
+      });
+      this._contentMatchCount = count;
+      this._contentMatchIdx = 0;
+      this._updateContentSearchUI();
+      return;
+    }
+    if (tab.type === 'subtitle-viewer') {
+      const cues = [...frame.querySelectorAll('.sub-cue')];
+      const matching = q ? cues.filter(c => (c.dataset.text || '').includes(q)) : [];
+      cues.forEach(c => { c.style.outline = ''; });
+      if (!matching.length) { this._contentMatchCount = 0; this._updateContentSearchUI(); return; }
+      if (reset) this._contentMatchIdx = 0;
+      this._contentMatchIdx = Math.min(this._contentMatchIdx, matching.length - 1);
+      matching[this._contentMatchIdx].style.outline = '2px solid #7c8cf8';
+      matching[this._contentMatchIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      this._contentMatchCount = matching.length;
+      this._updateContentSearchUI();
+      return;
+    }
+    if (tab.type === 'markdown') {
+      const els = [...frame.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6')];
+      const matching = q ? els.filter(el => el.textContent.toLowerCase().includes(q)) : [];
+      if (!matching.length) { this._contentMatchCount = 0; this._updateContentSearchUI(); return; }
+      if (reset) this._contentMatchIdx = 0;
+      this._contentMatchIdx = Math.min(this._contentMatchIdx, matching.length - 1);
+      matching[this._contentMatchIdx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      this._contentMatchCount = matching.length;
+      this._updateContentSearchUI();
+      return;
+    }
+    // iframe (custom type)
+    const iframes = frame.tagName === 'IFRAME' ? [frame] : frame.querySelectorAll('iframe');
+    const target = iframes[0];
+    if (target && q) {
+      try { target.contentWindow?.find?.(q, false, false, true, false, true, false); } catch {}
+    }
+    this._contentMatchCount = 0;
+    this._updateContentSearchUI();
+  },
+
+  _updateContentSearchUI() {
+    const countEl = document.getElementById('rcs-count');
+    if (countEl) {
+      countEl.textContent = this._contentMatchCount > 0
+        ? (this._contentMatchIdx + 1) + '/' + this._contentMatchCount : '';
+    }
   },
 
   setChapter(idx) {
     this._activeChapter = idx;
     this._typeFilter = null;
     this._nameFilter = '';
+    this._contentSearch = '';
+    this._contentMatchCount = 0;
+    this._contentMatchIdx = 0;
     const visible = this._visibleTabs();
     if (visible.length === 0) {
       this.activeId = null;
@@ -1833,6 +1999,7 @@ const TabManager = {
     const id = 'tab_' + Date.now();
     const tab = { id, title, url, type, chapterIdx, scrollY: 0 };
     this.tabs.push(tab);
+    this._tabOrigin.set(id, this.activeId);
     if (type === 'markdown') this._createMarkdownFrame(tab);
     else this._createFrame(tab);
     this.activeId = id;
@@ -1886,10 +2053,16 @@ const TabManager = {
     this.tabs.splice(idx, 1);
     if (this.activeId === id) {
       const nowVisible = this._visibleTabs();
-      this.activeId = nowVisible[Math.max(0, nowVisible.findIndex(t => t.id === id) - 1)]?.id
-                   || nowVisible[0]?.id
-                   || this.tabs[0]?.id;
+      const origin = this._tabOrigin.get(id);
+      if (origin && origin !== id && this.tabs.find(t => t.id === origin) && nowVisible.find(t => t.id === origin)) {
+        this.activeId = origin;
+      } else {
+        this.activeId = nowVisible[Math.max(0, nowVisible.findIndex(t => t.id === id) - 1)]?.id
+                     || nowVisible[0]?.id
+                     || this.tabs[0]?.id;
+      }
     }
+    this._tabOrigin.delete(id);
     this._renderTabBar();
     this._applyActiveTab();
     this._save();
@@ -3061,6 +3234,28 @@ document.getElementById('marker-label-input')?.addEventListener('keydown', e => 
 const _rmScrollTo = { fn: null };
 
 function showReadingMarkers() {
+  // Video-grid: show chapter video list instead of headings
+  const activeTab = typeof TabManager !== 'undefined' ? TabManager.tabs.find(t => t.id === TabManager.activeId) : null;
+  if (activeTab && activeTab.type === 'video-grid') {
+    const tocEl = document.getElementById('reading-markers-list');
+    const chIdx = activeTab.chapterIdx;
+    const ch = (typeof CourseDir !== 'undefined' && CourseDir._data) ? CourseDir._data.chapters?.[chIdx] : null;
+    const videos = ch?.videos || [];
+    if (tocEl && videos.length) {
+      tocEl.innerHTML = '<div style="font-size:10px;color:#64748b;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #2d3154">Chapter Videos</div>' +
+        videos.map((v, i) => {
+          const title = v.name.replace(/\.[^.]+$/, '');
+          const entry = JSON.stringify({id:'cdir_'+chIdx+'_'+i, title, youtubeId:null, localFile:v.rel, subtitleFile:null, hasSub:v.hasSub||false}).replace(/"/g,'&quot;');
+          return `<div class="marker-item" style="cursor:pointer" onclick="CourseDir._playGridVideo(${entry});closeReadingMarkers()">
+            <i data-lucide="play" size="10" style="color:#7c8cf8;flex-shrink:0"></i>
+            <span class="lbl" style="font-size:11px">${title.replace(/</g,'&lt;')}</span>
+          </div>`;
+        }).join('');
+      lucide.createIcons({ el: tocEl });
+      document.getElementById('reading-modal').style.display = 'flex';
+      return;
+    }
+  }
   const frame = typeof TabManager !== 'undefined' ? TabManager.getActiveFrame() : null;
   const tocEl = document.getElementById('reading-markers-list');
   if (tocEl && frame) {
@@ -4534,6 +4729,26 @@ const CourseDir = {
     if (courseUrl) {
       try { rootLabel = new URL(courseUrl).hostname || rootLabel; } catch { rootLabel = courseUrl || rootLabel; }
     }
+    // Aggregate doc types across all chapters for root node pills
+    const rootDocTypes = {};
+    const ROOT_DOC_ICON = {pdf:`<i data-lucide="file-down" size="10"></i>`,epub:`<i data-lucide="book-open" size="10"></i>`,md:`<i data-lucide="file-text" size="10"></i>`,html:`<i data-lucide="code-2" size="10"></i>`,zip:`<i data-lucide="archive" size="10"></i>`,txt:`<i data-lucide="file" size="10"></i>`,videos:`<i data-lucide="play" size="10"></i>`,srt:`<i data-lucide="subtitles" size="10"></i>`};
+    for (const ch of chapters) {
+      if (ch.videos.length) rootDocTypes['videos'] = (rootDocTypes['videos'] || 0) + ch.videos.length;
+      ch.videos.forEach(v => { if (v.hasSub) rootDocTypes['srt'] = (rootDocTypes['srt'] || 0) + 1; });
+      ch.docs.forEach(d => {
+        const e = d.name.split('.').pop().toLowerCase();
+        const mapped = e === 'htm' ? 'html' : e === 'doc' ? 'docx' : e;
+        if (ROOT_DOC_ICON[mapped]) rootDocTypes[mapped] = (rootDocTypes[mapped] || 0) + 1;
+      });
+    }
+    const rootPillsRow = this._activeIdx === -1 && Object.keys(rootDocTypes).length
+      ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px">${Object.entries(rootDocTypes).map(([e, cnt]) =>
+          `<span onclick="event.stopPropagation();CourseDir._filterAnyChapterByType('${e}')"
+                 title="${e.toUpperCase()} (${cnt})"
+                 style="display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;white-space:nowrap"
+                 onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'">${ROOT_DOC_ICON[e]} ${cnt}</span>`
+        ).join('')}</div>` : '';
+
     const rootHtml = rootLabel
       ? `<div style="display:flex;align-items:center;gap:6px;padding:4px 2px 6px 2px;cursor:pointer;border-radius:6px;transition:background .12s"
               onclick="CourseDir.openRoot()" title="Show root content"
@@ -4550,6 +4765,7 @@ const CourseDir = {
                        title="${this._showAllPills ? 'Hide doc types' : 'Show all doc types'}"
                        style="font-size:9px;border:1px solid #2d3154;border-radius:4px;padding:0 4px;background:none;color:#64748b;cursor:pointer;line-height:1.4">${this._showAllPills ? '▲' : '▼'}</button>
              </div>
+             ${rootPillsRow}
            </div>
          </div>`
       : '';
@@ -4645,6 +4861,20 @@ const CourseDir = {
     if (this._activeIdx !== idx) await this.openChapter(idx);
     await TabManager.setTypeFilter(ext);
     this.syncFilterHighlight(ext);
+  },
+
+  async _filterAnyChapterByType(ext) {
+    if (!this._data) return;
+    for (let i = 0; i < this._data.chapters.length; i++) {
+      const ch = this._data.chapters[i];
+      const has = ext === 'videos' ? ch.videos.length > 0
+        : ext === 'srt' ? ch.videos.some(v => v.hasSub)
+        : ch.docs.some(d => {
+            const e = d.name.split('.').pop().toLowerCase();
+            return e === ext || (e === 'htm' && ext === 'html') || (e === 'doc' && ext === 'docx');
+          });
+      if (has) { await this.filterChapter(i, ext); return; }
+    }
   },
 
   syncFilterHighlight(ext) {
@@ -4790,7 +5020,7 @@ const CourseDir = {
         const hasSub = !!v.hasSub;
         const cardBorder = hasSub ? '#3b5fd8' : '#2d3154';
         const titleStyle = hasSub ? 'text-decoration:underline;text-underline-offset:2px' : '';
-        return `<div onclick="CourseDir._playGridVideo(${safeEntry})"
+        return `<div class="vgrid-card" data-vtitle="${v.title.toLowerCase().replace(/"/g,'&quot;')}" onclick="CourseDir._playGridVideo(${safeEntry})"
                      style="cursor:pointer;border-radius:8px;overflow:hidden;background:#151829;border:1px solid ${cardBorder};transition:border-color .15s"
                      onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='${cardBorder}'">
           ${thumbHtml}
@@ -4953,7 +5183,7 @@ const CourseDir = {
       const h = Math.floor(c.time/3600), m = Math.floor((c.time%3600)/60), s = c.time%60;
       const ts = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
       const clickAttr = entryJson ? `onclick="Video._seekOnLoad=${c.time};Video._playAfterSeek=true;Video.load(${entryJson})" style="cursor:pointer"` : '';
-      return `<div ${clickAttr} style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
+      return `<div class="sub-cue" data-text="${c.text.replace(/"/g,'&quot;').toLowerCase()}" ${clickAttr} style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
                    onmouseover="this.style.background='rgba(124,140,248,.12)'" onmouseout="this.style.background=''">
         <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
         <span style="line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
@@ -5023,7 +5253,7 @@ const CourseDir = {
         const clickAttr = entryJson
           ? `onclick="Video._seekOnLoad=${c.time};Video._playAfterSeek=true;Video.load(${entryJson})" style="cursor:pointer"`
           : '';
-        return `<div ${clickAttr} style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
+        return `<div class="sub-cue" data-text="${c.text.replace(/"/g,'&quot;').toLowerCase()}" ${clickAttr} style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
                      onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
           <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
           <span style="line-height:1.6">${c.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
@@ -5087,7 +5317,7 @@ const CourseDir = {
           const clickAttr = entryJson
             ? `onclick="Video._seekOnLoad=${c.time};Video._playAfterSeek=true;Video.load(${entryJson})" style="cursor:pointer"`
             : '';
-          return `<div ${clickAttr}
+          return `<div class="sub-cue" data-text="${c.text.replace(/"/g,'&quot;').toLowerCase()}" ${clickAttr}
                        style="display:flex;align-items:flex-start;gap:10px;padding:5px 6px;border-radius:5px;margin-bottom:2px"
                        onmouseover="this.style.background='#1e2947'" onmouseout="this.style.background=''">
             <span style="font-size:11px;font-weight:700;color:#7c8cf8;flex-shrink:0;min-width:42px;padding-top:2px">${ts}</span>
