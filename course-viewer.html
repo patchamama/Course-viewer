@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.33';
+const APP_VERSION = '1.1.34';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1586,7 +1586,10 @@ const TabManager = {
     else if (!visible.find(t => t.id === this.activeId)) this.activeId = visible[0]?.id || null;
   },
 
+  _batchOpen: false,
+
   async _maybeReopenChapterTabs(ch, chIdx, ext) {
+    this._batchOpen = true;
     if (ext === 'videos') {
       if (!this.tabs.find(t => t.id === 'vgrid_' + chIdx) && ch.videos?.length > 0) {
         const entries = ch.videos.map((v, i) => ({
@@ -1595,7 +1598,7 @@ const TabManager = {
         }));
         CourseDir._openVideoGrid(entries, chIdx);
       }
-      return;
+      this._batchOpen = false; return;
     }
     if (ext === 'srt') {
       for (const v of (ch.videos || [])) {
@@ -1610,7 +1613,7 @@ const TabManager = {
           await CourseDir._openSubtitleTab(subRel, stem, chIdx);
         }
       }
-      return;
+      this._batchOpen = false; return;
     }
     const EXT_MAP = { docx: ['docx','doc'], html: ['html','htm'], md: ['md'], pdf: ['pdf'],
                       epub: ['epub'], txt: ['txt'], zip: ['zip'], rtf: ['rtf'], other: [] };
@@ -1632,6 +1635,7 @@ const TabManager = {
         }
       }
     }
+    this._batchOpen = false;
   },
 
   // Shared icon/label maps used by updateFilterBar and helpers
@@ -2108,15 +2112,19 @@ const TabManager = {
     const tab = { id, title, url, type, chapterIdx, scrollY: 0 };
     this.tabs.push(tab);
     this._tabOrigin.set(id, this.activeId);
-    // Clear filters that would hide the newly opened tab
-    const wouldBeHidden = !this._visibleTabs().some(t => t.id === id);
-    if (wouldBeHidden) { this._typeFilter = null; this._nameFilter = ''; }
+    // Clear filters that would hide the newly opened tab (skip during batch reopen)
+    if (!this._batchOpen) {
+      const wouldBeHidden = !this._visibleTabs().some(t => t.id === id);
+      if (wouldBeHidden) { this._typeFilter = null; this._nameFilter = ''; }
+    }
     if (type === 'markdown') this._createMarkdownFrame(tab);
     else this._createFrame(tab);
     this.activeId = id;
-    this._renderTabBar();
-    this._applyActiveTab();
-    this.updateFilterBar();
+    if (!this._batchOpen) {
+      this._renderTabBar();
+      this._applyActiveTab();
+      this.updateFilterBar();
+    }
     this._save();
   },
 
@@ -2631,7 +2639,7 @@ const Video = {
     };
 
     if (videoEntry.localFile) {
-      const encodedPath = encodeLocalPath(videoEntry.localFile);
+      const encodedPath = videoEntry.localFile.split('/').map(encodeURIComponent).join('/');
       // Probe the file: many local .mp4 entries are 0-byte YouTube stubs (the real
       // video lives on YouTube). A real file has content; a stub reports size 0.
       // HEAD is fast — the proxy returns os.path.getsize() without reading the file.
@@ -2828,11 +2836,6 @@ const Video = {
 function extractYtId(url) {
   const m = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
   return m ? m[1] : null;
-}
-
-function encodeLocalPath(relPath) {
-  // Decode each segment first so filenames that already contain %20 don't get double-encoded
-  return relPath.split('/').map(s => { try { return encodeURIComponent(decodeURIComponent(s)); } catch { return encodeURIComponent(s); } }).join('/');
 }
 
 function extractYtIdFromFilename(filename) {
@@ -5308,7 +5311,7 @@ const CourseDir = {
     div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;padding:12px';
     div.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">${
       entries.map(v => {
-        const enc = encodeLocalPath(v.localFile);
+        const enc = v.localFile.split('/').map(encodeURIComponent).join('/');
         const sid = v.id.replace(/[^a-z0-9]/gi, '_');
         const safeEntry = JSON.stringify(v).replace(/"/g,'&quot;');
         const safeTitle = v.title.replace(/"/g,'&quot;').replace(/</g,'&lt;');
@@ -5369,7 +5372,7 @@ const CourseDir = {
       const sid = v.id.replace(/[^a-z0-9]/gi, '_');
       const vidEl = container.querySelector(`video[data-vsid="${sid}"]`);
       if (!vidEl) return;
-      const src = '/' + encodeLocalPath(v.localFile);
+      const src = '/' + v.localFile.split('/').map(encodeURIComponent).join('/');
       this._thumbQueue.push({ vidEl, sid, videoId: v.id, src });
     });
     this._drainThumbQueue();
