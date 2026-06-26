@@ -1234,7 +1234,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.16';
+const APP_VERSION = '1.1.17';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1653,7 +1653,7 @@ const TabManager = {
       bar.innerHTML = Object.entries(rootCounts).map(([ext, cnt]) => {
         const icon = DOC_ICON[ext] || `<i data-lucide="paperclip" size="11"></i>`;
         const lbl = DOC_LBL[ext] || ext.toUpperCase();
-        return `<button class="filter-pill" onclick="CourseDir._filterAnyChapterByType('${ext}')" title="${lbl} (${cnt})" style="display:flex;align-items:center;gap:3px">${icon} ${cnt}</button>`;
+        return `<button class="filter-pill" onclick="CourseDir._openRootType('${ext}')" title="${lbl} (${cnt})" style="display:flex;align-items:center;gap:3px">${icon} ${cnt}</button>`;
       }).join('');
       lucide.createIcons({ el: bar });
       return;
@@ -4827,7 +4827,7 @@ const CourseDir = {
     }
     const rootPillsRow = this._activeIdx === -1 && Object.keys(rootDocTypes).length
       ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px">${Object.entries(rootDocTypes).map(([e, cnt]) =>
-          `<span onclick="event.stopPropagation();CourseDir._filterAnyChapterByType('${e}')"
+          `<span onclick="event.stopPropagation();CourseDir._openRootType('${e}')"
                  title="${e.toUpperCase()} (${cnt})"
                  style="display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;white-space:nowrap"
                  onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'">${ROOT_DOC_ICON[e]} ${cnt}</span>`
@@ -4959,6 +4959,66 @@ const CourseDir = {
           });
       if (has) { await this.filterChapter(i, ext); return; }
     }
+  },
+
+  // Opens root-level files of a given type (subdirectory pattern only).
+  // For flat-prefix pattern, delegates to _filterAnyChapterByType (chapters ARE root files).
+  async _openRootType(ext) {
+    if (!this._data) return;
+    if (this._data.pattern !== 'subdirectory') {
+      return this._filterAnyChapterByType(ext);
+    }
+    const rootVideos = this._data.root_videos || [];
+    const rootDocs   = this._data.root_docs   || [];
+    // Stay in root context (no active chapter)
+    if (TabManager._activeChapter !== null) TabManager.setChapter(null);
+
+    if (ext === 'videos') {
+      const tabId = 'vgrid_root';
+      if (TabManager.tabs.find(t => t.id === tabId)) { TabManager.switchTo(tabId); return; }
+      const entries = rootVideos.map((v, i) => ({
+        id: 'root_' + i, title: v.name.replace(/\.[^.]+$/, ''),
+        youtubeId: null, localFile: v.rel, subtitleFile: null, hasSub: v.hasSub || false,
+      }));
+      this._openVideoGrid(entries, 'root');
+      return;
+    }
+
+    if (ext === 'srt') {
+      for (let i = 0; i < rootVideos.length; i++) {
+        const v = rootVideos[i];
+        if (!v.hasSub) continue;
+        const stem = v.name.replace(/\.[^.]+$/, '');
+        const tabId = 'sub_null_' + encodeURIComponent(stem);
+        if (TabManager.tabs.find(t => t.id === tabId)) continue;
+        const vEntry = {
+          id: 'root_' + i, title: stem,
+          youtubeId: null, localFile: v.rel, subtitleFile: null, hasSub: true,
+        };
+        await this._openSubtitleTab(stem, stem, null, vEntry);
+      }
+      const first = TabManager.tabs.find(t => t.type === 'subtitle-viewer' && t.chapterIdx === null);
+      if (first) TabManager.switchTo(first.id);
+      return;
+    }
+
+    // Doc types: open matching root-level docs
+    let firstId = null;
+    for (const doc of rootDocs) {
+      const e = doc.name.split('.').pop().toLowerCase();
+      const mapped = e === 'htm' ? 'html' : e === 'doc' ? 'docx' : e;
+      if (mapped !== ext && e !== ext) continue;
+      if (e === 'zip') {
+        await this._openZipViewer(doc.rel, doc.name, null);
+      } else {
+        const url = doc.rel.split('/').map(encodeURIComponent).join('/');
+        if (!TabManager.tabs.find(t => t.url === url)) {
+          TabManager.openTab(url, doc.name, 'custom', null);
+        }
+        if (!firstId) firstId = TabManager.tabs.find(t => t.url === url)?.id;
+      }
+    }
+    if (firstId) TabManager.switchTo(firstId);
   },
 
   syncFilterHighlight(ext) {
@@ -5356,7 +5416,7 @@ const CourseDir = {
     } catch (e) { toast('Error opening subtitle file'); }
   },
 
-  async _openSubtitleTab(basePath, title, chapterIdx) {
+  async _openSubtitleTab(basePath, title, chapterIdx, providedVideoEntry = null) {
     const exts = ['srt', 'vtt'];
     for (const ext of exts) {
       const rel = basePath + '.' + ext;
@@ -5368,17 +5428,20 @@ const CourseDir = {
         const tabId = 'sub_' + chapterIdx + '_' + encodeURIComponent(title);
         if (TabManager.tabs.find(t => t.id === tabId)) return;
 
-        // Find associated video entry
-        const chData = this._data?.chapters?.[chapterIdx];
-        const vData = chData ? chData.videos.find(v => v.name.replace(/\.[^.]+$/, '') === title) : null;
-        const vEntry = vData ? {
-          id: 'cdir_' + chapterIdx + '_' + chData.videos.indexOf(vData),
-          title,
-          youtubeId: null,
-          localFile: vData.rel,
-          subtitleFile: rel,
-          hasSub: true
-        } : null;
+        // Use provided video entry (e.g. root-level) or look up from chapter data
+        let vEntry = providedVideoEntry;
+        if (!vEntry) {
+          const chData = this._data?.chapters?.[chapterIdx];
+          const vData = chData ? chData.videos.find(v => v.name.replace(/\.[^.]+$/, '') === title) : null;
+          vEntry = vData ? {
+            id: 'cdir_' + chapterIdx + '_' + chData.videos.indexOf(vData),
+            title,
+            youtubeId: null,
+            localFile: vData.rel,
+            subtitleFile: rel,
+            hasSub: true
+          } : null;
+        }
         const entryJson = vEntry ? JSON.stringify(vEntry).replace(/"/g, '&quot;') : null;
 
         const cues = this._parseSrt(content);

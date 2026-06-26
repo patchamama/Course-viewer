@@ -383,9 +383,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 chapters.append({'title': sub, 'videos': videos, 'docs': docs,
                                  'subpath': sub, 'hasSubs': has_subsubs})
             if chapters:
-                # Collect files directly in root (not inside any subdir)
+                # Root-level files: rescan without the _ prefix filter so files like
+                # "_ELO 25 Basics Training..." are included (they are user content, not
+                # cache dirs; only __pycache__ and similar dirs needed the _ exclusion).
+                try:
+                    root_scan = sorted(os.listdir(STATIC_DIR), key=str.lower)
+                except Exception:
+                    root_scan = []
                 root_videos, root_docs = [], []
-                for f in root_files:
+                for f in root_scan:
+                    if f.startswith('.'):
+                        continue
+                    fpath = os.path.join(STATIC_DIR, f)
+                    if not os.path.isfile(fpath):
+                        continue
+                    if f.lower() in EXCL_NAMES:
+                        continue
                     ext = os.path.splitext(f)[1].lower()
                     if ext in VIDEO_EXTS:
                         base = os.path.join(STATIC_DIR, os.path.splitext(f)[0])
