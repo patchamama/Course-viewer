@@ -325,15 +325,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         SUB_EXTS = {'.srt', '.vtt'}
 
-        def _has_sub(base_path):
+        import glob as _glob
+
+        def _find_sub(base_path, rel_base):
+            """Return (hasSub, subRel) where subRel is the path relative to STATIC_DIR."""
             for se in SUB_EXTS:
                 if os.path.isfile(base_path + se):
-                    return True
-                # language-coded: base.en.srt, base.de.srt, etc.
-                import glob as _glob
-                if _glob.glob(base_path + '.*' + se):
-                    return True
-            return False
+                    return True, rel_base + se
+                matches = sorted(_glob.glob(base_path + '.*' + se))
+                if matches:
+                    suffix = matches[0][len(base_path):]  # e.g. ".de.srt"
+                    return True, rel_base + suffix
+            return False, None
 
         if len(groups) >= 2:
             chapters = []
@@ -344,7 +347,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if os.path.splitext(f)[1].lower() not in VIDEO_EXTS:
                         continue
                     base = os.path.join(STATIC_DIR, os.path.splitext(f)[0])
-                    videos.append({'name': f, 'rel': f, 'hasSub': _has_sub(base)})
+                    has_sub, sub_rel = _find_sub(base, os.path.splitext(f)[0])
+                    videos.append({'name': f, 'rel': f, 'hasSub': has_sub, 'subRel': sub_rel})
                 docs   = [{'name': f, 'rel': f}
                           for f in files if os.path.splitext(f)[1].lower() in DOC_EXTS]
                 if not videos and not docs:
@@ -377,7 +381,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     rel = sub + '/' + f
                     if ext in VIDEO_EXTS:
                         base = os.path.join(sub_abs, os.path.splitext(f)[0])
-                        videos.append({'name': f, 'rel': rel, 'hasSub': _has_sub(base)})
+                        rel_base = sub + '/' + os.path.splitext(f)[0]
+                        has_sub, sub_rel = _find_sub(base, rel_base)
+                        videos.append({'name': f, 'rel': rel, 'hasSub': has_sub, 'subRel': sub_rel})
                     elif ext in DOC_EXTS:
                         docs.append({'name': f, 'rel': rel})
                 chapters.append({'title': sub, 'videos': videos, 'docs': docs,
@@ -402,7 +408,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     ext = os.path.splitext(f)[1].lower()
                     if ext in VIDEO_EXTS:
                         base = os.path.join(STATIC_DIR, os.path.splitext(f)[0])
-                        root_videos.append({'name': f, 'rel': f, 'hasSub': _has_sub(base)})
+                        has_sub, sub_rel = _find_sub(base, os.path.splitext(f)[0])
+                        root_videos.append({'name': f, 'rel': f, 'hasSub': has_sub, 'subRel': sub_rel})
                     elif ext in DOC_EXTS:
                         root_docs.append({'name': f, 'rel': f})
                 result = {'pattern': 'subdirectory', 'chapters': chapters,

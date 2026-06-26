@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.30';
+const APP_VERSION = '1.1.31';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1556,7 +1556,10 @@ const TabManager = {
       const existing = this.tabs.find(t => t.type === 'subtitle-viewer' && t.chapterIdx === chIdx
         && t.title.toLowerCase().includes(stem.toLowerCase().substring(0, 20)));
       if (!existing) {
-        const subRel = (ch.subpath ? ch.subpath + '/' : '') + stem;
+        // Use exact path from proxy (strips extension for _openSubtitleTab probing)
+        const subRel = v.subRel
+          ? v.subRel.replace(/\.[^.]+$/, '')
+          : (ch.subpath ? ch.subpath + '/' : '') + stem;
         await CourseDir._openSubtitleTab(subRel, stem, chIdx);
         this.activeId = prevActive;
       }
@@ -1601,7 +1604,9 @@ const TabManager = {
         const existing = this.tabs.find(t => t.type === 'subtitle-viewer' && t.chapterIdx === chIdx
           && t.title.toLowerCase().includes(stem.toLowerCase().substring(0, 20)));
         if (!existing) {
-          const subRel = (ch.subpath ? ch.subpath + '/' : '') + stem;
+          const subRel = v.subRel
+            ? v.subRel.replace(/\.[^.]+$/, '')
+            : (ch.subpath ? ch.subpath + '/' : '') + stem;
           await CourseDir._openSubtitleTab(subRel, stem, chIdx);
         }
       }
@@ -2220,7 +2225,7 @@ const TabManager = {
   _save() {
     if (!this._storageKey) return;
     const toSave = this.tabs
-      .filter(t => t.type !== 'dir-browser' && t.type !== 'zip-viewer' && t.type !== 'video-grid' && t.type !== 'subtitle-viewer')
+      .filter(t => t.type !== 'dir-browser' && t.type !== 'zip-viewer' && t.type !== 'video-grid' && t.type !== 'subtitle-viewer' && t.id !== 'demo_notes')
       .map(t => {
         const s = {
           id: t.id, title: t.title, type: t.type, scrollY: t.scrollY || 0,
@@ -5209,7 +5214,9 @@ const CourseDir = {
       for (const v of ch.videos) {
         if (v.hasSub) {
           const stem = v.name.replace(/\.[^.]+$/, '');
-          const subRel = (ch.subpath ? ch.subpath + '/' : '') + stem;
+          const subRel = v.subRel
+            ? v.subRel.replace(/\.[^.]+$/, '')
+            : (ch.subpath ? ch.subpath + '/' : '') + stem;
           await this._openSubtitleTab(subRel, stem, idx);
           if (!firstSubTabId) {
             const newest = TabManager.tabs.filter(t => t.chapterIdx === idx && t.type === 'subtitle-viewer').slice(-1)[0];
