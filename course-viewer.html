@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.31';
+const APP_VERSION = '1.1.32';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -2624,7 +2624,7 @@ const Video = {
     };
 
     if (videoEntry.localFile) {
-      const encodedPath = videoEntry.localFile.split('/').map(encodeURIComponent).join('/');
+      const encodedPath = encodeLocalPath(videoEntry.localFile);
       // Probe the file: many local .mp4 entries are 0-byte YouTube stubs (the real
       // video lives on YouTube). A real file has content; a stub reports size 0.
       // HEAD is fast — the proxy returns os.path.getsize() without reading the file.
@@ -2821,6 +2821,11 @@ const Video = {
 function extractYtId(url) {
   const m = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
   return m ? m[1] : null;
+}
+
+function encodeLocalPath(relPath) {
+  // Decode each segment first so filenames that already contain %20 don't get double-encoded
+  return relPath.split('/').map(s => { try { return encodeURIComponent(decodeURIComponent(s)); } catch { return encodeURIComponent(s); } }).join('/');
 }
 
 function extractYtIdFromFilename(filename) {
@@ -5296,7 +5301,7 @@ const CourseDir = {
     div.style.cssText = 'position:absolute;inset:0;overflow-y:auto;visibility:hidden;pointer-events:none;padding:12px';
     div.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">${
       entries.map(v => {
-        const enc = v.localFile.split('/').map(encodeURIComponent).join('/');
+        const enc = encodeLocalPath(v.localFile);
         const sid = v.id.replace(/[^a-z0-9]/gi, '_');
         const safeEntry = JSON.stringify(v).replace(/"/g,'&quot;');
         const safeTitle = v.title.replace(/"/g,'&quot;').replace(/</g,'&lt;');
@@ -5357,7 +5362,7 @@ const CourseDir = {
       const sid = v.id.replace(/[^a-z0-9]/gi, '_');
       const vidEl = container.querySelector(`video[data-vsid="${sid}"]`);
       if (!vidEl) return;
-      const src = '/' + v.localFile.split('/').map(encodeURIComponent).join('/');
+      const src = '/' + encodeLocalPath(v.localFile);
       this._thumbQueue.push({ vidEl, sid, videoId: v.id, src });
     });
     this._drainThumbQueue();

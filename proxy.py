@@ -1102,12 +1102,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     # ─── Shared file sender (Range + moov relocation) ─────────────────────────
     def _send_html_lazy(self, filepath: str, mime: str):
-        """Serve an HTML file with loading="lazy" injected on every <img> tag."""
+        """Serve an HTML file with loading="lazy" on <img> and preload="none" on <video>."""
         import re as _re
         try:
             with open(filepath, 'rb') as f:
                 data = f.read()
             data = _re.sub(rb'<img\s', rb'<img loading="lazy" ', data, flags=_re.IGNORECASE)
+            # Strip existing preload attr, then inject preload="none" to stop autoloading
+            data = _re.sub(rb'\s*preload\s*=\s*["\'][^"\']*["\']', b'', data, flags=_re.IGNORECASE)
+            data = _re.sub(rb'<video\s', rb'<video preload="none" ', data, flags=_re.IGNORECASE)
             self.send_response(200)
             self.send_header('Content-Type', mime)
             self.send_header('Content-Length', str(len(data)))
