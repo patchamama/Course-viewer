@@ -1074,17 +1074,18 @@
              oninput="GlobalSearch.onInput(this.value)"
              onkeydown="if(event.key==='Escape')GlobalSearch.close()">
       <span id="global-search-count" style="font-size:10px;color:#64748b;flex-shrink:0"></span>
-      <!-- Depth control -->
-      <span style="font-size:10px;color:#64748b;flex-shrink:0;margin-left:6px">Depth:</span>
-      <select id="gs-depth-select" title="Max subfolder depth to search"
-              onchange="GlobalSearch.setDepth(parseInt(this.value))"
-              style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#94a3b8;font-size:10px;padding:1px 4px;cursor:pointer;flex-shrink:0">
+      <!-- Depth control (compact) -->
+      <label style="font-size:10px;color:#64748b;flex-shrink:0;white-space:nowrap;display:flex;align-items:center;gap:3px" title="Max subfolder depth to search">
+        <i data-lucide="folders" size="11" style="flex-shrink:0"></i>
+        <select id="gs-depth-select"
+                onchange="GlobalSearch.setDepth(parseInt(this.value))"
+                style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#94a3b8;font-size:10px;padding:1px 2px;cursor:pointer;width:38px">
         <option value="1">1</option>
         <option value="2">2</option>
         <option value="3" selected>3</option>
         <option value="5">5</option>
         <option value="10">All</option>
-      </select>
+      </select></label>
       <button onclick="GlobalSearch.close()" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;line-height:1;padding:0 2px;flex-shrink:0;margin-left:4px">×</button>
     </div>
     <!-- Pre-filter: document type pills -->
@@ -1229,7 +1230,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.9';
+const APP_VERSION = '1.1.10';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1457,6 +1458,7 @@ const TabManager = {
     if (tab.type === 'zip-viewer') return 'zip';
     if (tab.type === 'image-viewer') return 'images';
     if (tab.type === 'video-grid') return 'videos';
+    if (tab.type === 'subtitle-viewer') return 'srt';
     if (tab.type === 'markdown') return 'md';
     const url = decodeURIComponent(tab.url || '');
     if (url.includes('/api/epub-html')) return 'epub';
@@ -1466,25 +1468,106 @@ const TabManager = {
       ? (ext === 'htm' ? 'html' : ext === 'doc' ? 'docx' : ext) : 'other';
   },
 
-  setTypeFilter(ext) {
-    // Toggle: clicking active filter deactivates it
-    this._typeFilter = (this._typeFilter === ext) ? null : ext;
+  _nameFilter: '',
+
+  setNameFilter(q) {
+    this._nameFilter = q.toLowerCase();
+    this._renderTabBar();
+    this._applyActiveTab();
+  },
+
+  async setTypeFilter(ext) {
     if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
-    const visible = this._visibleTabs();
-    if (!visible.find(t => t.id === this.activeId)) {
-      this.activeId = visible[0]?.id || null;
-    } else if (this._typeFilter !== null) {
-      // If current tab is a global (video-grid, dir-browser, etc.), force switch to
-      // the first tab that actually matches the requested type
-      const cur = this.tabs.find(t => t.id === this.activeId);
-      if (cur && this._GLOBAL_TYPES.has(cur.type)) {
-        const firstMatch = visible.find(t => !this._GLOBAL_TYPES.has(t.type));
-        if (firstMatch) this.activeId = firstMatch.id;
-      }
+    if (ext === null) {
+      // "Show all" — only way to deactivate filter
+      this._typeFilter = null;
+      this._nameFilter = '';
+      const visible = this._visibleTabs();
+      if (!visible.find(t => t.id === this.activeId)) this.activeId = visible[0]?.id || null;
+      this._finishFilter();
+      return;
     }
+    if (this._typeFilter === ext) {
+      // Same filter: cycle to next tab of same type, never deactivate
+      const matching = this._visibleTabs().filter(t => this._tabExt(t) === ext);
+      if (matching.length > 1) {
+        const cur = matching.findIndex(t => t.id === this.activeId);
+        this.activeId = matching[(cur + 1) % matching.length].id;
+      }
+      this._finishFilter();
+      return;
+    }
+    // New filter: re-open closed tabs of this type, then switch to first match
+    this._typeFilter = ext;
+    this._nameFilter = '';
+    await this._reopenAndSwitchToType(ext);
+    this._finishFilter();
+  },
+
+  _finishFilter() {
     this._renderTabBar();
     this._applyActiveTab();
     this.updateFilterBar();
+    if (typeof CourseDir !== 'undefined' && CourseDir.syncFilterHighlight) {
+      CourseDir.syncFilterHighlight(this._typeFilter);
+    }
+  },
+
+  async _reopenAndSwitchToType(ext) {
+    if (this._activeChapter !== null && typeof CourseDir !== 'undefined' && CourseDir._data) {
+      const ch = CourseDir._data.chapters?.[this._activeChapter];
+      if (ch) await this._maybeReopenChapterTabs(ch, this._activeChapter, ext);
+    }
+    const visible = this._visibleTabs();
+    const firstMatch = visible.find(t => this._tabExt(t) === ext);
+    if (firstMatch) this.activeId = firstMatch.id;
+    else if (!visible.find(t => t.id === this.activeId)) this.activeId = visible[0]?.id || null;
+  },
+
+  async _maybeReopenChapterTabs(ch, chIdx, ext) {
+    if (ext === 'videos') {
+      if (!this.tabs.find(t => t.id === 'vgrid_' + chIdx) && ch.videos?.length > 0) {
+        const entries = ch.videos.map((v, i) => ({
+          id: 'cdir_' + chIdx + '_' + i, title: v.name.replace(/\.[^.]+$/, ''),
+          youtubeId: null, localFile: v.rel, subtitleFile: null, hasSub: v.hasSub || false,
+        }));
+        CourseDir._openVideoGrid(entries, chIdx);
+      }
+      return;
+    }
+    if (ext === 'srt') {
+      for (const v of (ch.videos || [])) {
+        if (!v.hasSub) continue;
+        const stem = v.name.replace(/\.[^.]+$/, '');
+        const existing = this.tabs.find(t => t.type === 'subtitle-viewer' && t.chapterIdx === chIdx
+          && t.title.toLowerCase().includes(stem.toLowerCase().substring(0, 20)));
+        if (!existing) {
+          const subRel = (ch.subpath ? ch.subpath + '/' : '') + stem;
+          await CourseDir._openSubtitleTab(subRel, stem, chIdx);
+        }
+      }
+      return;
+    }
+    const EXT_MAP = { docx: ['docx','doc'], html: ['html','htm'], md: ['md'], pdf: ['pdf'],
+                      epub: ['epub'], txt: ['txt'], zip: ['zip'], rtf: ['rtf'], other: [] };
+    const exts = EXT_MAP[ext] || [ext];
+    for (const doc of (ch.docs || [])) {
+      const docExt = doc.name.split('.').pop().toLowerCase();
+      const mapped = docExt === 'htm' ? 'html' : docExt === 'doc' ? 'docx' : docExt;
+      if (!exts.includes(docExt) && !exts.includes(mapped)) continue;
+      if (doc.name.toLowerCase().endsWith('.zip')) {
+        if (!this.tabs.find(t => t.type === 'zip-viewer' && t.chapterIdx === chIdx && t.title === doc.name)) {
+          await CourseDir._openZipViewer(doc.rel, doc.name, chIdx);
+        }
+      } else {
+        const url = doc.rel.split('/').map(encodeURIComponent).join('/');
+        if (!this.tabs.find(t => t.url === url)) {
+          const prevActive = this.activeId;
+          this.openTab(url, doc.name, 'custom', chIdx);
+          this.activeId = prevActive;  // don't let openTab steal focus mid-batch
+        }
+      }
+    }
   },
 
   updateFilterBar() {
@@ -1503,32 +1586,42 @@ const TabManager = {
       txt:    `<i data-lucide="file" size="11"></i>`,
       images: `<i data-lucide="image" size="11"></i>`,
       videos: `<i data-lucide="play" size="11"></i>`,
+      srt:    `<i data-lucide="subtitles" size="11"></i>`,
       json:   `<i data-lucide="braces" size="11"></i>`,
       js:     `<i data-lucide="code-2" size="11"></i>`,
       py:     `<i data-lucide="code-2" size="11"></i>`,
       other:  `<i data-lucide="paperclip" size="11"></i>`,
     };
-    const EXT_LABEL = {pdf:'PDF',epub:'EPUB',md:'MD',html:'HTML',zip:'ZIP',txt:'TXT',images:'IMG',videos:'Video',json:'JSON',js:'JS',py:'PY',other:'DOC'};
+    const EXT_LABEL = {pdf:'PDF',epub:'EPUB',md:'MD',html:'HTML',zip:'ZIP',txt:'TXT',images:'IMG',videos:'Video',srt:'SRT',json:'JSON',js:'JS',py:'PY',other:'DOC'};
     const counts = {};
     for (const t of chTabs) {
       const e = this._tabExt(t);
       counts[e] = (counts[e] || 0) + 1;
     }
+    const filteredByType = this._typeFilter !== null
+      ? chTabs.filter(t => this._tabExt(t) === this._typeFilter) : [];
     bar.style.display = 'flex';
-    bar.innerHTML = [
+    const pills = [
       `<button class="filter-pill${this._typeFilter === null ? ' active' : ''}" onclick="TabManager.setTypeFilter(null)" title="Show all" style="display:flex;align-items:center;gap:3px"><i data-lucide="layout-grid" size="11"></i> ${chTabs.length}</button>`,
       ...Object.entries(counts).map(([ext, cnt]) => {
         const icon = EXT_ICON[ext] || `<i data-lucide="paperclip" size="11"></i>`;
         const lbl  = EXT_LABEL[ext] || ext.toUpperCase();
         return `<button class="filter-pill${this._typeFilter === ext ? ' active' : ''}" onclick="TabManager.setTypeFilter('${ext}')" title="${lbl}" style="display:flex;align-items:center;gap:3px">${icon} ${cnt}</button>`;
-      })
-    ].join('');
+      }),
+    ];
+    if (this._typeFilter !== null && filteredByType.length > 3) {
+      pills.push(`<input type="text" placeholder="Filter by name…" value="${this._nameFilter || ''}"
+        oninput="TabManager.setNameFilter(this.value)"
+        style="background:#1e2947;border:1px solid #2d3154;border-radius:4px;color:#c4cfe8;font-size:10px;padding:1px 6px;flex:1;min-width:80px;max-width:140px;outline:none">`);
+    }
+    bar.innerHTML = pills.join('');
     lucide.createIcons({ el: bar });
   },
 
   setChapter(idx) {
     this._activeChapter = idx;
-    this._typeFilter = null;  // reset type filter on chapter change
+    this._typeFilter = null;
+    this._nameFilter = '';
     const visible = this._visibleTabs();
     if (visible.length === 0) {
       this.activeId = null;
@@ -1552,19 +1645,22 @@ const TabManager = {
     this._save();
   },
 
-  // Tab types that are always visible regardless of active chapter
-  _GLOBAL_TYPES: new Set(['dir-browser','code-viewer','search-results','subtitle-viewer','video-grid']),
+  // Tab types that are always visible regardless of active chapter or type filter
+  _GLOBAL_TYPES: new Set(['dir-browser','code-viewer','search-results']),
 
   _visibleTabs() {
     let tabs = this.tabs;
     if (this._activeChapter !== null) {
-      // When chapter active: show that chapter's tabs + global (cross-chapter) tabs
       tabs = tabs.filter(t =>
         t.chapterIdx === this._activeChapter || this._GLOBAL_TYPES.has(t.type)
       );
     }
     if (this._typeFilter !== null) {
       tabs = tabs.filter(t => this._tabExt(t) === this._typeFilter || this._GLOBAL_TYPES.has(t.type));
+    }
+    if (this._nameFilter) {
+      const q = this._nameFilter;
+      tabs = tabs.filter(t => this._GLOBAL_TYPES.has(t.type) || t.title.toLowerCase().includes(q));
     }
     return tabs;
   },
@@ -4464,21 +4560,28 @@ const CourseDir = {
         const e = d.name.split('.').pop().toLowerCase();
         if (DOC_ICON_MAP[e]) docCounts[e] = (docCounts[e] || 0) + 1;
       });
+      const _af = TabManager._typeFilter;
+      const _pillStyle = (f) => {
+        const active = _af === f;
+        return `display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid ${active?'#7c8cf8':'#2d3154'};border-radius:8px;padding:1px 5px;color:${active?'#a5b4fc':'#94a3b8'};margin-right:3px;white-space:nowrap`;
+      };
       const docPills = Object.entries(docCounts).map(([e, cnt]) =>
         `<span onclick="event.stopPropagation();CourseDir.filterChapter(${idx},'${e}')"
-               title="${e.toUpperCase()} (${cnt})"
-               style="display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;margin-right:3px;white-space:nowrap"
-               onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'">${DOC_ICON_MAP[e]} ${cnt}</span>`
+               data-cdir-filter="${e}" title="${e.toUpperCase()} (${cnt})"
+               style="${_pillStyle(e)}"
+               onmouseover="if(TabManager._typeFilter!=='${e}'){this.style.borderColor='#7c8cf8'}" onmouseout="if(TabManager._typeFilter!=='${e}'){this.style.borderColor='#2d3154'}">${DOC_ICON_MAP[e]} ${cnt}</span>`
       ).join('');
       const videoMeta = ch.videos.length > 0
         ? `<span onclick="event.stopPropagation();CourseDir.filterChapter(${idx},'videos')"
-                 title="Videos (${ch.videos.length})"
-                 style="display:inline-flex;align-items:center;gap:2px;font-size:9px;cursor:pointer;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;margin-right:3px"
-                 onmouseover="this.style.borderColor='#7c8cf8'" onmouseout="this.style.borderColor='#2d3154'"><i data-lucide="play" size="10"></i> ${ch.videos.length}</span>` : '';
+                 data-cdir-filter="videos" title="Videos (${ch.videos.length})"
+                 style="${_pillStyle('videos')}"
+                 onmouseover="if(TabManager._typeFilter!=='videos'){this.style.borderColor='#7c8cf8'}" onmouseout="if(TabManager._typeFilter!=='videos'){this.style.borderColor='#2d3154'}"><i data-lucide="play" size="10"></i> ${ch.videos.length}</span>` : '';
       const subCount = ch.videos.filter(v => v.hasSub).length;
       const subPill = subCount > 0
-        ? `<span title="Subtitles (${subCount})"
-                 style="display:inline-flex;align-items:center;gap:2px;font-size:9px;border:1px solid #2d3154;border-radius:8px;padding:1px 5px;color:#94a3b8;margin-right:3px">
+        ? `<span onclick="event.stopPropagation();CourseDir.filterChapter(${idx},'srt')"
+                 data-cdir-filter="srt" title="Subtitles (${subCount})"
+                 style="${_pillStyle('srt')}"
+                 onmouseover="if(TabManager._typeFilter!=='srt'){this.style.borderColor='#7c8cf8'}" onmouseout="if(TabManager._typeFilter!=='srt'){this.style.borderColor='#2d3154'}">
                  <i data-lucide="subtitles" size="10"></i> ${subCount}</span>` : '';
       const subfolderPill = ch.subpath
         ? `<span onclick="event.stopPropagation();DirBrowser.openTab('${(ch.subpath||'').replace(/'/g,"\\'")}')"
@@ -4526,14 +4629,18 @@ const CourseDir = {
   },
 
   async filterChapter(idx, ext) {
-    if (this._activeIdx !== idx) {
-      await this.openChapter(idx);
-      // openChapter resets _typeFilter; apply now after navigation
-      TabManager.setTypeFilter(ext);
-    } else {
-      // Same chapter — toggle the filter
-      TabManager.setTypeFilter(ext);
-    }
+    if (this._activeIdx !== idx) await this.openChapter(idx);
+    await TabManager.setTypeFilter(ext);
+    this.syncFilterHighlight(ext);
+  },
+
+  syncFilterHighlight(ext) {
+    document.querySelectorAll('[data-cdir-filter]').forEach(el => {
+      const f = el.dataset.cdirFilter;
+      const active = f === ext;
+      el.style.borderColor = active ? '#7c8cf8' : '#2d3154';
+      el.style.color = active ? '#a5b4fc' : '#94a3b8';
+    });
   },
 
   async openChapter(idx) {
