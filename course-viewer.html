@@ -1234,7 +1234,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.12';
+const APP_VERSION = '1.1.13';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1632,14 +1632,21 @@ const TabManager = {
       const DOC_ICON = {pdf:`<i data-lucide="file-down" size="11"></i>`,epub:`<i data-lucide="book-open" size="11"></i>`,md:`<i data-lucide="file-text" size="11"></i>`,html:`<i data-lucide="code-2" size="11"></i>`,zip:`<i data-lucide="archive" size="11"></i>`,txt:`<i data-lucide="file" size="11"></i>`,videos:`<i data-lucide="play" size="11"></i>`,srt:`<i data-lucide="subtitles" size="11"></i>`,docx:`<i data-lucide="paperclip" size="11"></i>`};
       const DOC_LBL = {pdf:'PDF',epub:'EPUB',md:'MD',html:'HTML',zip:'ZIP',txt:'TXT',images:'IMG',videos:'Video',srt:'SRT',docx:'DOCX',other:'DOC'};
       const rootCounts = {};
-      for (const ch of CourseDir._data.chapters) {
-        if (ch.videos.length) rootCounts['videos'] = (rootCounts['videos'] || 0) + ch.videos.length;
-        ch.videos.forEach(v => { if (v.hasSub) rootCounts['srt'] = (rootCounts['srt'] || 0) + 1; });
-        ch.docs.forEach(d => {
-          const e = d.name.split('.').pop().toLowerCase();
-          const m = e === 'htm' ? 'html' : e === 'doc' ? 'docx' : e;
-          rootCounts[m] = (rootCounts[m] || 0) + 1;
-        });
+      const _addRC = (name, hasSub) => {
+        const e = name.split('.').pop().toLowerCase();
+        const VIDEO_RE = /^(mp4|mkv|avi|webm|m4v|mov)$/;
+        const MAP = {htm:'html',doc:'docx'};
+        if (VIDEO_RE.test(e)) { rootCounts['videos'] = (rootCounts['videos']||0) + 1; if (hasSub) rootCounts['srt'] = (rootCounts['srt']||0) + 1; }
+        else { const m = MAP[e]||e; rootCounts[m] = (rootCounts[m]||0) + 1; }
+      };
+      if (CourseDir._data.pattern === 'subdirectory') {
+        (CourseDir._data.root_videos || []).forEach(v => _addRC(v.name, v.hasSub));
+        (CourseDir._data.root_docs   || []).forEach(d => _addRC(d.name, false));
+      } else {
+        for (const ch of CourseDir._data.chapters) {
+          ch.videos.forEach(v => _addRC(v.name, v.hasSub));
+          ch.docs.forEach(d => _addRC(d.name, false));
+        }
       }
       if (Object.keys(rootCounts).length === 0) { bar.style.display = 'none'; return; }
       bar.style.display = 'flex';
@@ -4729,17 +4736,25 @@ const CourseDir = {
     if (courseUrl) {
       try { rootLabel = new URL(courseUrl).hostname || rootLabel; } catch { rootLabel = courseUrl || rootLabel; }
     }
-    // Aggregate doc types across all chapters for root node pills
+    // Doc types for root node pills: root-level files only (subdirectory pattern)
+    // or aggregate of all chapters (flat-prefix, where all files ARE at root level)
     const rootDocTypes = {};
     const ROOT_DOC_ICON = {pdf:`<i data-lucide="file-down" size="10"></i>`,epub:`<i data-lucide="book-open" size="10"></i>`,md:`<i data-lucide="file-text" size="10"></i>`,html:`<i data-lucide="code-2" size="10"></i>`,zip:`<i data-lucide="archive" size="10"></i>`,txt:`<i data-lucide="file" size="10"></i>`,videos:`<i data-lucide="play" size="10"></i>`,srt:`<i data-lucide="subtitles" size="10"></i>`};
-    for (const ch of chapters) {
-      if (ch.videos.length) rootDocTypes['videos'] = (rootDocTypes['videos'] || 0) + ch.videos.length;
-      ch.videos.forEach(v => { if (v.hasSub) rootDocTypes['srt'] = (rootDocTypes['srt'] || 0) + 1; });
-      ch.docs.forEach(d => {
-        const e = d.name.split('.').pop().toLowerCase();
-        const mapped = e === 'htm' ? 'html' : e === 'doc' ? 'docx' : e;
-        if (ROOT_DOC_ICON[mapped]) rootDocTypes[mapped] = (rootDocTypes[mapped] || 0) + 1;
-      });
+    const _addRootFile = (name, hasSub) => {
+      const e = name.split('.').pop().toLowerCase();
+      const VIDEO_RE = /^(mp4|mkv|avi|webm|m4v|mov)$/;
+      const DOC_RE_MAP = {htm:'html',doc:'docx'};
+      if (VIDEO_RE.test(e)) { rootDocTypes['videos'] = (rootDocTypes['videos']||0) + 1; if (hasSub) rootDocTypes['srt'] = (rootDocTypes['srt']||0) + 1; }
+      else { const m = DOC_RE_MAP[e] || e; if (ROOT_DOC_ICON[m]) rootDocTypes[m] = (rootDocTypes[m]||0) + 1; }
+    };
+    if (this._data.pattern === 'subdirectory') {
+      (this._data.root_videos || []).forEach(v => _addRootFile(v.name, v.hasSub));
+      (this._data.root_docs  || []).forEach(d => _addRootFile(d.name, false));
+    } else {
+      for (const ch of chapters) {
+        ch.videos.forEach(v => _addRootFile(v.name, v.hasSub));
+        ch.docs.forEach(d => _addRootFile(d.name, false));
+      }
     }
     const rootPillsRow = this._activeIdx === -1 && Object.keys(rootDocTypes).length
       ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px">${Object.entries(rootDocTypes).map(([e, cnt]) =>

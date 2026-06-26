@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw
 import proxy
 import updater
 
-APP_VERSION = "1.1.12"
+APP_VERSION = "1.1.13"
 
 
 def _app_dir():

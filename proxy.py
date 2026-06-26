@@ -294,7 +294,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         VIDEO_EXTS = {'.mp4', '.mkv', '.avi', '.webm', '.m4v', '.mov'}
         DOC_EXTS   = {'.pdf', '.md', '.html', '.htm', '.epub', '.txt', '.zip', '.docx', '.doc', '.rtf'}
         EXCL_NAMES = {
-            'course-viewer.html', 'proxy.py', 'start.bat', 'start.sh',
+            'course-viewer.html', 'proxy.py',
+            'start.bat', 'start.sh', 'start_courseviewer.bat', 'start_courseviewer.sh',
             'index.html', 'readme.md', 'demo.html', 'course-viewer.config.json',
             'course-viewer.config.json.example',
         }
@@ -382,7 +383,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 chapters.append({'title': sub, 'videos': videos, 'docs': docs,
                                  'subpath': sub, 'hasSubs': has_subsubs})
             if chapters:
-                result = {'pattern': 'subdirectory', 'chapters': chapters}
+                # Collect files directly in root (not inside any subdir)
+                root_videos, root_docs = [], []
+                for f in root_files:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in VIDEO_EXTS:
+                        base = os.path.join(STATIC_DIR, os.path.splitext(f)[0])
+                        root_videos.append({'name': f, 'rel': f, 'hasSub': _has_sub(base)})
+                    elif ext in DOC_EXTS:
+                        root_docs.append({'name': f, 'rel': f})
+                result = {'pattern': 'subdirectory', 'chapters': chapters,
+                          'root_videos': root_videos, 'root_docs': root_docs}
 
         self._json(result)
 
