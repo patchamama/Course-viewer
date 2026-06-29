@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '2.0.2';
+const APP_VERSION = '2.0.3';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -5323,7 +5323,7 @@ const CourseDir = {
                <div id="vspin-${sid}" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;background:rgba(0,0,0,.4)">
                  <div style="width:18px;height:18px;border:2px solid #3b4fd8;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div>
                </div>
-               <video data-vsid="${sid}" data-vid="${v.id}" preload="none" muted playsinline
+               <video data-vsid="${sid}" data-vid="${v.id}" preload="metadata" muted playsinline
                       style="width:100%;height:100%;object-fit:cover;position:relative;z-index:1"></video>
                <span id="vdur-${sid}" style="position:absolute;bottom:4px;right:4px;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.75);padding:2px 5px;border-radius:4px;z-index:3"></span>
              </div>`;
@@ -5379,6 +5379,7 @@ const CourseDir = {
       vidEl.onseeked        = () => CourseDir._captureThumbnail(sid, videoId);
       vidEl.onerror         = () => CourseDir._thumbError(sid);
       vidEl.src = src;
+      vidEl.load(); // Force load even when parent is visibility:hidden
     }
   },
 
@@ -5402,23 +5403,29 @@ const CourseDir = {
 
   _captureThumbnail(sid, videoId) {
     const wrap = document.getElementById('vthumb-' + sid);
-    if (!wrap || wrap.dataset.captured) return;
+    // Element gone from DOM → release slot to unblock queue
+    if (!wrap) { this._thumbActive--; this._drainThumbQueue(); return; }
+    // Already processed by a previous event → do not double-decrement
+    if (wrap.dataset.captured) return;
     wrap.dataset.captured = '1';
     const vid = wrap.querySelector('video');
-    if (!vid) return;
-    // Remove spinner
+    if (!vid) { this._thumbActive--; this._drainThumbQueue(); return; }
     const spinner = document.getElementById('vspin-' + sid);
     if (spinner) spinner.remove();
-    // Wait one animation frame so the decoder has time to paint the frame
-    requestAnimationFrame(() => {
+
+    const done = () => { vid.src = ''; this._thumbActive--; this._drainThumbQueue(); };
+
+    const tryDraw = (attempt) => {
       const durEl = wrap.querySelector('[id^="vdur-"]');
       try {
-        const w = vid.videoWidth || 320;
-        const h = vid.videoHeight || Math.round(w * 9 / 16);
+        const w = vid.videoWidth || 0;
+        const h = vid.videoHeight || 0;
+        if (!w || !h) throw new Error('no-dim');
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(vid, 0, 0, w, h);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+        if (dataUrl.length < 200) throw new Error('blank');
         const img = document.createElement('img');
         img.src = dataUrl;
         img.style.cssText = 'width:100%;height:100px;object-fit:cover;display:block;background:#000';
@@ -5427,18 +5434,26 @@ const CourseDir = {
         wrap.appendChild(img);
         if (durClone) wrap.appendChild(durClone);
         try { localStorage.setItem('vt_' + videoId, dataUrl); } catch { /* storage quota */ }
+        done();
       } catch {
-        if (spinner) wrap.prepend(spinner);
+        if (attempt > 0) { setTimeout(() => tryDraw(attempt - 1), 250); return; }
+        // Retries exhausted — show play icon fallback
+        const durEl2 = wrap.querySelector('[id^="vdur-"]');
+        wrap.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#0a0c1a;color:#3b4fd8">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+        </div>`;
+        if (durEl2) wrap.appendChild(durEl2);
+        done();
       }
-      vid.src = '';
-      this._thumbActive--;
-      this._drainThumbQueue();
-    });
+    };
+
+    requestAnimationFrame(() => tryDraw(3));
   },
 
   _thumbError(sid) {
     const wrap = document.getElementById('vthumb-' + sid);
-    if (!wrap || wrap.dataset.captured) return;
+    if (!wrap) { this._thumbActive--; this._drainThumbQueue(); return; }
+    if (wrap.dataset.captured) return;
     wrap.dataset.captured = '1';
     const spinner = document.getElementById('vspin-' + sid);
     if (spinner) spinner.remove();
@@ -5642,7 +5657,14 @@ const CourseDir = {
         }
         const entryJson = vEntry ? JSON.stringify(vEntry).replace(/"/g, '&quot;') : null;
 
-        const cues = this._parseSrt(content);
+        // .txt index files use a different format (H:MM:SS - Title), not SRT blocks
+        const cues = ext === 'txt' ? this._parseIndexTxt(content) : this._parseSrt(content);
+        // Fall back to plain-text iframe if no cues could be parsed
+        if (!cues.length && ext === 'txt') {
+          const url = rel.split('/').map(encodeURIComponent).join('/');
+          TabManager.openTab(url, title, 'custom', chapterIdx);
+          return;
+        }
         const tab = { id: tabId, title: '📄 ' + title + ' (subs)', url: rel, type: 'subtitle-viewer', chapterIdx, scrollY: 0 };
         TabManager.tabs.push(tab);
 
@@ -5683,6 +5705,25 @@ const CourseDir = {
         return;
       } catch { /* file not found, try next ext */ }
     }
+  },
+
+  // Parse plain-text index files with lines like:
+  //   0:00:00 - Title text (0:01:07)
+  //   1:23:45 - Another section
+  // Returns cues in the same {time, text} format as _parseSrt.
+  _parseIndexTxt(content) {
+    const cues = [];
+    const TS_RE = /^(\d+:\d{2}(?::\d{2})?(?:[.,]\d+)?)\s*[-–]\s*(.+)$/;
+    for (const line of content.split(/\r?\n/)) {
+      const m = line.trim().match(TS_RE);
+      if (!m) continue;
+      const parts = m[1].split(':').map(s => parseFloat(s.replace(',', '.')));
+      const time = parts.length === 2
+        ? parts[0] * 60 + parts[1]
+        : parts[0] * 3600 + parts[1] * 60 + parts[2];
+      cues.push({ time, text: m[2].trim() });
+    }
+    return cues;
   },
 
   _parseSrt(content) {
