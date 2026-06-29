@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '2.0.2';
+const APP_VERSION = '2.0.3';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -5849,10 +5849,19 @@ async function init() {
   // Render file list
   renderFileList();
 
-  // Auto-open last watched video, or first in list
+  // Auto-open last watched video, or first in list.
+  // ?openFile= (set by app.py when launched via "Open with" on a file) takes priority.
   {
     const allVids = [...(appConfig.videos || []), ...ExternalVideos.load()];
-    if (allVids.length > 0) {
+    const _openFileParam = _urlParams.get('openFile');
+    if (_openFileParam) {
+      const found = allVids.find(v => v.localFile && v.localFile.split('/').pop() === _openFileParam);
+      Video.load(found || {
+        id: 'cli_' + encodeURIComponent(_openFileParam),
+        title: _openFileParam.replace(/\.[^.]+$/, ''),
+        youtubeId: null, localFile: _openFileParam, subtitleFile: null, hasSub: false,
+      });
+    } else if (allVids.length > 0) {
       const lastId = localStorage.getItem(`oc_last_video_id_${appConfig?._dirId || 'default'}`);
       const toLoad = allVids.find(v => v.id === lastId) || allVids[0];
       Video.load(toLoad);
