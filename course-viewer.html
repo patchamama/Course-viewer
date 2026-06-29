@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '2.0.4';
+const APP_VERSION = '2.0.5';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -4913,7 +4913,11 @@ const CourseDir = {
       this._data = data;
       this._render();
       PanelC.show();
-    } catch {}
+      // Upgrade any stale custom .txt tabs restored from localStorage
+      await this._migrateTxtTabs();
+    } catch(e) {
+      console.error('[CourseDir] detect failed:', e);
+    }
   },
 
   _render() {
@@ -5509,8 +5513,41 @@ const CourseDir = {
         subtitleFile: rel, hasSub: true,
       } : null;
       this._openSubtitleViewerFromText(text, stem, chapterIdx, vEntry, cues);
-    } catch {
+    } catch(e) {
+      console.error('[CourseDir] _openDocOrIndex failed:', e, rel);
       TabManager.openTab(url, name, 'custom', chapterIdx);
+    }
+  },
+
+  // Upgrade any stale custom .txt tabs (restored from localStorage before this feature
+  // existed) to index viewers. Called once after detect() loads the course structure.
+  async _migrateTxtTabs() {
+    const stale = TabManager.tabs.filter(
+      t => t.type === 'custom' && /\.txt$/i.test((t.url || '').split('?')[0])
+    );
+    for (const tab of stale) {
+      const idx  = tab.chapterIdx;
+      const name = decodeURIComponent(tab.url.split('/').pop());
+      const rel  = decodeURIComponent(tab.url);
+      try {
+        const text = await fetch(tab.url).then(r => r.ok ? r.text() : null);
+        if (!text) continue;
+        const cues = this._parseIndexTxt(text);
+        if (!cues.length) continue;
+        // Remove stale plain-iframe tab before opening index viewer
+        TabManager.closeTab(tab.id);
+        const stem    = name.replace(/\.txt$/i, '');
+        const chData  = idx != null ? this._data?.chapters?.[idx] : null;
+        const vData   = chData?.videos?.find(v => v.name.replace(/\.[^.]+$/, '') === stem);
+        const vEntry  = vData ? {
+          id: 'auto_' + encodeURIComponent(vData.rel),
+          title: stem, youtubeId: null, localFile: vData.rel,
+          subtitleFile: rel, hasSub: true,
+        } : null;
+        this._openSubtitleViewerFromText(text, stem, idx, vEntry, cues);
+      } catch(e) {
+        console.error('[CourseDir] _migrateTxtTabs failed for', tab.url, e);
+      }
     }
   },
 
