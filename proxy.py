@@ -323,7 +323,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if m:
                 groups.setdefault(m.group(1), []).append(fname)
 
-        SUB_EXTS = {'.srt', '.vtt'}
+        SUB_EXTS = {'.srt', '.vtt', '.txt'}
 
         import glob as _glob
 
@@ -343,15 +343,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             chapters = []
             for pfx in sorted(groups, key=lambda x: int(x)):
                 files  = sorted(groups[pfx])
-                videos = []
+                videos, sub_txts, doc_candidates = [], set(), []
                 for f in files:
-                    if os.path.splitext(f)[1].lower() not in VIDEO_EXTS:
-                        continue
-                    base = os.path.join(STATIC_DIR, os.path.splitext(f)[0])
-                    has_sub, sub_rel = _find_sub(base, os.path.splitext(f)[0])
-                    videos.append({'name': f, 'rel': f, 'hasSub': has_sub, 'subRel': sub_rel})
-                docs   = [{'name': f, 'rel': f}
-                          for f in files if os.path.splitext(f)[1].lower() in DOC_EXTS]
+                    ext_f = os.path.splitext(f)[1].lower()
+                    if ext_f in VIDEO_EXTS:
+                        base = os.path.join(STATIC_DIR, os.path.splitext(f)[0])
+                        has_sub, sub_rel = _find_sub(base, os.path.splitext(f)[0])
+                        if has_sub and sub_rel and sub_rel.lower().endswith('.txt'):
+                            sub_txts.add(os.path.basename(sub_rel))
+                        videos.append({'name': f, 'rel': f, 'hasSub': has_sub, 'subRel': sub_rel})
+                    elif ext_f in DOC_EXTS:
+                        doc_candidates.append({'name': f, 'rel': f})
+                docs = [d for d in doc_candidates if d['name'] not in sub_txts]
                 if not videos and not docs:
                     continue
                 src   = videos[0]['name'] if videos else docs[0]['name']
@@ -369,7 +372,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     sub_entries = sorted(os.listdir(sub_abs), key=str.lower)
                 except Exception:
                     sub_entries = []
-                videos, docs = [], []
+                videos, sub_txts, doc_candidates = [], set(), []
                 has_subsubs = False
                 for f in sub_entries:
                     if f.startswith('.') or f.startswith('_'):
@@ -384,9 +387,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         base = os.path.join(sub_abs, os.path.splitext(f)[0])
                         rel_base = sub + '/' + os.path.splitext(f)[0]
                         has_sub, sub_rel = _find_sub(base, rel_base)
+                        if has_sub and sub_rel and sub_rel.lower().endswith('.txt'):
+                            sub_txts.add(os.path.basename(sub_rel))
                         videos.append({'name': f, 'rel': rel, 'hasSub': has_sub, 'subRel': sub_rel})
                     elif ext in DOC_EXTS:
-                        docs.append({'name': f, 'rel': rel})
+                        doc_candidates.append({'name': f, 'rel': rel})
+                docs = [d for d in doc_candidates if d['name'] not in sub_txts]
                 chapters.append({'title': sub, 'videos': videos, 'docs': docs,
                                  'subpath': sub, 'hasSubs': has_subsubs})
             if chapters:
@@ -397,7 +403,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     root_scan = sorted(os.listdir(STATIC_DIR), key=str.lower)
                 except Exception:
                     root_scan = []
-                root_videos, root_docs = [], []
+                root_videos, root_sub_txts, root_doc_candidates = [], set(), []
                 for f in root_scan:
                     if f.startswith('.'):
                         continue
@@ -410,9 +416,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if ext in VIDEO_EXTS:
                         base = os.path.join(STATIC_DIR, os.path.splitext(f)[0])
                         has_sub, sub_rel = _find_sub(base, os.path.splitext(f)[0])
+                        if has_sub and sub_rel and sub_rel.lower().endswith('.txt'):
+                            root_sub_txts.add(os.path.basename(sub_rel))
                         root_videos.append({'name': f, 'rel': f, 'hasSub': has_sub, 'subRel': sub_rel})
                     elif ext in DOC_EXTS:
-                        root_docs.append({'name': f, 'rel': f})
+                        root_doc_candidates.append({'name': f, 'rel': f})
+                root_docs = [d for d in root_doc_candidates if d['name'] not in root_sub_txts]
                 result = {'pattern': 'subdirectory', 'chapters': chapters,
                           'root_videos': root_videos, 'root_docs': root_docs}
 

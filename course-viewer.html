@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '2.0.1';
+const APP_VERSION = '2.0.2';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1951,9 +1951,8 @@ const TabManager = {
       );
       this.activeId = this.tabs.find(t => t.id === saved.activeId) ? saved.activeId : this.tabs[0].id;
     } else {
-      const courseUrl = appConfig.courseUrl || '';
-      this.tabs = [{ id: 'course', title: 'Course', url: courseUrl, type: 'course', scrollY: 0 }];
-      this.activeId = 'course';
+      this.tabs = [];
+      this.activeId = null;
     }
     this._createAllFrames();
     this._renderTabBar();
@@ -4892,9 +4891,6 @@ const CourseDir = {
     if (!hasVideos) {
       DirBrowser.openTab('');
     } else {
-      // Reset to main course tab
-      const courseTab = TabManager.tabs.find(t => t.id === 'course');
-      if (courseTab) TabManager.switchTo('course');
       if (typeof PanelB !== 'undefined' && PanelB.mode !== 'course') PanelB.setMode('course');
       if (typeof PanelA !== 'undefined' && PanelA.minimized) PanelA.toggleMinimize();
     }
@@ -5215,7 +5211,6 @@ const CourseDir = {
 
     // Open docs (+ subtitle tabs) only if first visit
     const chapterHasTabs = TabManager.tabs.some(t => t.chapterIdx === idx);
-    let firstDocTabId = null, firstSubTabId = null;
     if (!chapterHasTabs) {
       for (const doc of ch.docs) {
         const lname = doc.name.toLowerCase();
@@ -5224,10 +5219,6 @@ const CourseDir = {
         } else {
           const url = doc.rel.split('/').map(encodeURIComponent).join('/');
           TabManager.openTab(url, doc.name, 'custom', idx);
-        }
-        if (!firstDocTabId) {
-          const newest = TabManager.tabs.filter(t => t.chapterIdx === idx).slice(-1)[0];
-          if (newest) firstDocTabId = newest.id;
         }
       }
       // Open subtitle tabs for videos that have subtitles
@@ -5238,20 +5229,22 @@ const CourseDir = {
             ? v.subRel.replace(/\.[^.]+$/, '')
             : (ch.subpath ? ch.subpath + '/' : '') + stem;
           await this._openSubtitleTab(subRel, stem, idx);
-          if (!firstSubTabId) {
-            const newest = TabManager.tabs.filter(t => t.chapterIdx === idx && t.type === 'subtitle-viewer').slice(-1)[0];
-            if (newest) firstSubTabId = newest.id;
-          }
         }
       }
-      // Switch to first available tab: docs first, then subtitles
-      const preferredTabId = firstDocTabId || firstSubTabId;
-      if (preferredTabId) TabManager.switchTo(preferredTabId);
-    } else {
-      // Re-visit: ensure first chapter tab is active
-      const chTab = TabManager.tabs.find(t => t.chapterIdx === idx);
-      if (chTab && TabManager.activeId !== chTab.id) TabManager.switchTo(chTab.id);
     }
+    // Pick the highest-priority doc/subtitle tab to show first.
+    // Priority: epub > md > html > pdf > txt > docx > zip > srt
+    // Videos and DirBrowser are lower-priority fallbacks handled below.
+    const _OPEN_PRIO = ['epub','md','html','pdf','txt','docx','zip','srt'];
+    const preferredDocTabId = (() => {
+      const chTabs = TabManager.tabs.filter(t => t.chapterIdx === idx && t.type !== 'video-grid');
+      for (const key of _OPEN_PRIO) {
+        const found = chTabs.find(t => TabManager._tabExt(t) === key);
+        if (found) return found.id;
+      }
+      return null;
+    })();
+    if (preferredDocTabId) TabManager.switchTo(preferredDocTabId);
 
     // Keep DirBrowser in sync with active chapter path (silently — don't steal tab focus)
     if (ch.subpath && TabManager.tabs.find(t => t.id === DirBrowser._tabId)) {
@@ -5273,18 +5266,13 @@ const CourseDir = {
       window._chapterVideos = entries;
       renderFileList();
       Video.load(entries[0]);
-      if (filesBody && filesBody.style.display === 'none') toggleSection('files');
       // Create video grid tab if it doesn't exist yet
       const _gridId = 'vgrid_' + idx;
-      const hadDocsOrSubs = !!(firstDocTabId || firstSubTabId);
       if (!TabManager.tabs.find(t => t.id === _gridId)) {
         this._openVideoGrid(entries, idx);
-        // If we already switched to a doc/sub tab, don't let video grid steal focus
-        if (hadDocsOrSubs) {
-          const preferredId = firstDocTabId || firstSubTabId;
-          if (preferredId) setTimeout(() => TabManager.switchTo(preferredId), 0);
-        }
-      } else if (!hadDocsOrSubs) {
+        // Doc/subtitle tabs take priority over video grid — restore preferred focus
+        if (preferredDocTabId) setTimeout(() => TabManager.switchTo(preferredDocTabId), 0);
+      } else if (!preferredDocTabId) {
         TabManager.switchTo(_gridId);
       }
     } else {
@@ -5627,7 +5615,7 @@ const CourseDir = {
   },
 
   async _openSubtitleTab(basePath, title, chapterIdx, providedVideoEntry = null) {
-    const exts = ['srt', 'vtt'];
+    const exts = ['srt', 'vtt', 'txt'];
     for (const ext of exts) {
       const rel = basePath + '.' + ext;
       try {
