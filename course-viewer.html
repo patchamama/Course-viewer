@@ -1239,7 +1239,7 @@
 // ────────────────────────────────────────────────────────────
 // VERSION
 // ────────────────────────────────────────────────────────────
-const APP_VERSION = '2.0.3';
+const APP_VERSION = '2.0.4';
 
 // ────────────────────────────────────────────────────────────
 // DEMO CONFIG  (MIT — The Missing Semester of Your CS Education)
@@ -1541,6 +1541,9 @@ const TabManager = {
           await CourseDir._openZipViewer(doc.rel, doc.name, chIdx);
           this.activeId = prevActive;
         }
+      } else if (doc.name.toLowerCase().endsWith('.txt')) {
+        await CourseDir._openDocOrIndex(doc.rel, doc.name, chIdx);
+        this.activeId = prevActive;
       } else {
         const url = doc.rel.split('/').map(encodeURIComponent).join('/');
         if (!this.tabs.find(t => t.url === url)) {
@@ -1626,6 +1629,10 @@ const TabManager = {
         if (!this.tabs.find(t => t.type === 'zip-viewer' && t.chapterIdx === chIdx && t.title === doc.name)) {
           await CourseDir._openZipViewer(doc.rel, doc.name, chIdx);
         }
+      } else if (doc.name.toLowerCase().endsWith('.txt')) {
+        const prevActive = this.activeId;
+        await CourseDir._openDocOrIndex(doc.rel, doc.name, chIdx);
+        this.activeId = prevActive;
       } else {
         const url = doc.rel.split('/').map(encodeURIComponent).join('/');
         if (!this.tabs.find(t => t.url === url)) {
@@ -5178,6 +5185,15 @@ const CourseDir = {
       if (mapped !== ext && e !== ext) continue;
       if (e === 'zip') {
         await this._openZipViewer(doc.rel, doc.name, null);
+      } else if (e === 'txt') {
+        await this._openDocOrIndex(doc.rel, doc.name, null);
+        if (!firstId) {
+          const stem = doc.name.replace(/\.[^.]+$/, '');
+          const t = TabManager.tabs.find(
+            tt => tt.chapterIdx === null && (tt.url === doc.rel.split('/').map(encodeURIComponent).join('/') || tt.title.includes(stem))
+          );
+          if (t) firstId = t.id;
+        }
       } else {
         const url = doc.rel.split('/').map(encodeURIComponent).join('/');
         if (!TabManager.tabs.find(t => t.url === url)) {
@@ -5216,6 +5232,8 @@ const CourseDir = {
         const lname = doc.name.toLowerCase();
         if (lname.endsWith('.zip')) {
           await this._openZipViewer(doc.rel, doc.name, idx);
+        } else if (lname.endsWith('.txt')) {
+          await this._openDocOrIndex(doc.rel, doc.name, idx);
         } else {
           const url = doc.rel.split('/').map(encodeURIComponent).join('/');
           TabManager.openTab(url, doc.name, 'custom', idx);
@@ -5464,6 +5482,38 @@ const CourseDir = {
     this._drainThumbQueue();
   },
 
+  // Open a .txt doc: if the content matches the timestamp-index format, render as an
+  // interactive index viewer (subtitle-viewer tab with clickable seek links); otherwise
+  // fall back to a plain-text iframe so non-index .txt files are unaffected.
+  async _openDocOrIndex(rel, name, chapterIdx) {
+    const stem = name.replace(/\.[^.]+$/, '');
+    // Skip fetch if an index viewer for this stem is already open
+    const existing = TabManager.tabs.find(
+      t => t.type === 'subtitle-viewer' && t.chapterIdx === chapterIdx &&
+           t.title.includes(stem)
+    );
+    if (existing) { TabManager.switchTo(existing.id); return; }
+
+    const url = rel.split('/').map(encodeURIComponent).join('/');
+    try {
+      const text = await fetch(url).then(r => r.ok ? r.text() : null);
+      if (!text) { TabManager.openTab(url, name, 'custom', chapterIdx); return; }
+      const cues = this._parseIndexTxt(text);
+      if (!cues.length) { TabManager.openTab(url, name, 'custom', chapterIdx); return; }
+      // Find matching video by same stem name in this chapter
+      const chData = this._data?.chapters?.[chapterIdx];
+      const vData  = chData?.videos?.find(v => v.name.replace(/\.[^.]+$/, '') === stem);
+      const vEntry = vData ? {
+        id: 'cdir_' + chapterIdx + '_' + chData.videos.indexOf(vData),
+        title: stem, youtubeId: null, localFile: vData.rel,
+        subtitleFile: rel, hasSub: true,
+      } : null;
+      this._openSubtitleViewerFromText(text, stem, chapterIdx, vEntry, cues);
+    } catch {
+      TabManager.openTab(url, name, 'custom', chapterIdx);
+    }
+  },
+
   async _openZipViewer(zipRel, zipName, chapterIdx = null) {
     const tabId = 'zip_' + btoa(unescape(encodeURIComponent(zipRel))).replace(/[^a-z0-9]/gi, '').slice(0, 20);
     const existing = TabManager.tabs.find(t => t.id === tabId);
@@ -5524,10 +5574,10 @@ const CourseDir = {
     TabManager.openTab(serveUrl, name, 'custom', chIdx);
   },
 
-  _openSubtitleViewerFromText(text, title, chapterIdx, videoEntry) {
+  _openSubtitleViewerFromText(text, title, chapterIdx, videoEntry, precues = null) {
     const tabId = 'subv_' + btoa(unescape(encodeURIComponent(title + (chapterIdx ?? ''))).slice(0,20)).replace(/[^a-zA-Z0-9]/g,'').slice(0,20);
     if (TabManager.tabs.find(t => t.id === tabId)) { TabManager.switchTo(tabId); return; }
-    const cues = this._parseSrt(text);
+    const cues = precues ?? this._parseSrt(text);
     const tab  = { id: tabId, title: '📄 ' + title + ' (subs)', url: '', type: 'subtitle-viewer', chapterIdx: chapterIdx ?? null, scrollY: 0 };
     TabManager.tabs.push(tab);
     const container = document.getElementById('reader-frames-container');
