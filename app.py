@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw
 import proxy
 import updater
 
-APP_VERSION = "2.0.3"
+APP_VERSION = "2.0.2"
 
 
 def _app_dir():
@@ -29,20 +29,12 @@ def _app_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-def _parse_argv():
-    """Return (static_dir, open_file) from sys.argv.
-
-    Windows "Open with" passes the file path as argv[1].
-    If it's a file, use its parent dir as the content root and return the
-    filename so the browser can auto-play it via ?openFile=.
-    """
+def _static_dir():
     if len(sys.argv) > 1:
         candidate = os.path.normpath(sys.argv[1])
         if os.path.isdir(candidate):
-            return candidate, None
-        if os.path.isfile(candidate):
-            return os.path.dirname(candidate), os.path.basename(candidate)
-    return _app_dir(), None
+            return candidate
+    return _app_dir()
 
 
 def _dir_id(path):
@@ -96,18 +88,14 @@ def _load_icon(app_dir):
     return _make_icon()
 
 
-def _browser_url(port, dir_id, open_file=None):
+def _browser_url(port, dir_id):
     """Unique URL per invocation so the browser always opens a fresh tab."""
-    import urllib.parse as _up
-    url = f"http://127.0.0.1:{port}/?dirId={dir_id}&_t={int(time.time())}"
-    if open_file:
-        url += "&openFile=" + _up.quote(open_file)
-    return url
+    return f"http://127.0.0.1:{port}/?dirId={dir_id}&_t={int(time.time())}"
 
 
 def main():
     app_dir = _app_dir()
-    static_dir, open_file = _parse_argv()
+    static_dir = _static_dir()
     port = proxy.PORT
     dir_id = _dir_id(static_dir)
 
@@ -116,7 +104,7 @@ def main():
         # open a new browser tab. No second tray or server needed.
         _switch_dir(port, static_dir)
         time.sleep(0.25)  # give switch-dir time to complete before browser loads
-        webbrowser.open(_browser_url(port, dir_id, open_file))
+        webbrowser.open(_browser_url(port, dir_id))
         return
 
     # ── Fresh start ──────────────────────────────────────────────────────────
@@ -128,7 +116,7 @@ def main():
     server_thread.start()
     time.sleep(0.4)
 
-    webbrowser.open(_browser_url(port, dir_id, open_file))
+    webbrowser.open(_browser_url(port, dir_id))
 
     icon_image = _load_icon(app_dir)
 
